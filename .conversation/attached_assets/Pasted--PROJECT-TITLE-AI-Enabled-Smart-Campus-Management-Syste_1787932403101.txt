@@ -1,0 +1,1652 @@
+# PROJECT TITLE
+
+**AI-Enabled Smart Campus Management System for Academic and Administrative Services**
+
+**Student:** Gokul Prabu
+
+---
+
+## 1. PROJECT OBJECTIVE
+
+Build a complete, production-style, fully functioning web application called:
+
+**AI-Enabled Smart Campus Management System for Academic and Administrative Services**
+
+The system should provide a centralized digital platform for managing academic and administrative campus activities.
+
+The application must have:
+
+* Functional frontend
+* Functional backend
+* Real database
+* Authentication and authorization
+* Role-based dashboards
+* CRUD operations
+* AI-powered features
+* Search, filtering and sorting
+* Notifications
+* Reports and analytics
+* Responsive design
+* Proper validation
+* Error handling
+* Secure password storage
+* Demo/sample data
+* Clean and professional UI
+
+Do NOT create a static frontend or mock-only application.
+
+Every important button, form, menu, table, dashboard card and feature must actually work.
+
+---
+
+# 2. USER ROLES
+
+Implement four major roles:
+
+### 1. ADMIN
+
+Admin can:
+
+* Manage students
+* Manage faculty
+* Manage departments
+* Manage courses
+* Manage subjects
+* Manage classrooms
+* Manage academic schedules
+* Manage announcements
+* Manage events
+* Manage complaints
+* View attendance
+* View academic performance
+* Manage users
+* Generate reports
+* View system analytics
+* Configure system settings
+
+### 2. FACULTY
+
+Faculty can:
+
+* Login securely
+* View dashboard
+* View assigned subjects
+* View timetable
+* Mark student attendance
+* Update attendance
+* View student lists
+* Enter marks
+* Update academic performance
+* Upload study materials
+* Create assignments
+* View assignment submissions
+* Post announcements
+* Manage faculty profile
+* Communicate with students
+* Use AI academic assistant
+
+### 3. STUDENT
+
+Students can:
+
+* Login securely
+* View personal dashboard
+* View profile
+* View timetable
+* View attendance
+* View marks
+* View academic performance
+* View assignments
+* Submit assignments
+* Download study materials
+* View announcements
+* View campus events
+* Raise complaints/requests
+* Track complaint status
+* Receive notifications
+* Use AI assistant
+* View personalized academic recommendations
+
+### 4. STAFF / ADMINISTRATIVE USER
+
+Staff can:
+
+* Manage administrative requests
+* View student requests
+* Process complaints
+* Manage events
+* Manage announcements
+* Update request status
+* Generate administrative reports
+
+---
+
+# 3. TECHNOLOGY STACK
+
+Use a modern and reliable full-stack architecture.
+
+Preferred stack:
+
+### Frontend
+
+* React
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* Lucide React icons
+* Recharts for charts
+
+### Backend
+
+Use Node.js with Express OR the backend architecture most suitable for Replit.
+
+### Database
+
+Use PostgreSQL.
+
+Use an ORM such as Prisma if appropriate.
+
+### Authentication
+
+Implement secure authentication with:
+
+* Email/username
+* Password
+* Hashed passwords
+* Sessions/JWT
+* Role-based authorization
+* Logout
+* Protected routes
+
+Do not store plain-text passwords.
+
+---
+
+# 4. APPLICATION STRUCTURE
+
+Create a professional application layout.
+
+### Login Page
+
+Create a modern login page containing:
+
+* Campus logo
+* Project title
+* Email/Username field
+* Password field
+* Show/hide password
+* Remember me
+* Login button
+* Forgot password
+* Demo login information
+* Error messages
+
+After login, redirect users to the correct dashboard based on role.
+
+---
+
+# 5. ADMIN DASHBOARD
+
+Create an attractive admin dashboard.
+
+Display:
+
+* Total Students
+* Total Faculty
+* Total Staff
+* Total Departments
+* Total Courses
+* Average Attendance
+* Pending Complaints
+* Upcoming Events
+
+Include charts:
+
+### Student Analytics
+
+Bar chart showing students by department.
+
+### Attendance Analytics
+
+Line chart showing attendance trends.
+
+### Academic Performance
+
+Chart showing average marks/CGPA by department.
+
+### Complaints
+
+Pie/donut chart showing:
+
+* Pending
+* In Progress
+* Resolved
+
+### Recent Activities
+
+Show recent:
+
+* Student registrations
+* Attendance updates
+* Complaints
+* Announcements
+* Events
+
+---
+
+# 6. STUDENT MANAGEMENT
+
+Create a complete student management module.
+
+Admin should be able to:
+
+* Add student
+* Edit student
+* Delete student
+* View student
+* Search student
+* Filter by department
+* Filter by year
+* Filter by section
+* Sort students
+* View attendance
+* View academic performance
+
+Student fields:
+
+* Student ID
+* Name
+* Email
+* Phone
+* Date of Birth
+* Gender
+* Department
+* Course
+* Year
+* Semester
+* Section
+* Address
+* Admission Year
+* Profile Photo
+* Status
+
+Use proper form validation.
+
+---
+
+# 7. FACULTY MANAGEMENT
+
+Admin can:
+
+* Add faculty
+* Edit faculty
+* Delete faculty
+* View faculty
+* Search faculty
+* Assign subjects
+* Assign departments
+
+Faculty fields:
+
+* Faculty ID
+* Name
+* Email
+* Phone
+* Department
+* Designation
+* Qualification
+* Experience
+* Subjects
+* Joining Date
+* Status
+
+---
+
+# 8. DEPARTMENT MANAGEMENT
+
+Create department CRUD functionality.
+
+Fields:
+
+* Department ID
+* Department Name
+* Department Code
+* HOD
+* Description
+* Number of Students
+* Number of Faculty
+
+---
+
+# 9. COURSE AND SUBJECT MANAGEMENT
+
+Admin can:
+
+* Create course
+* Edit course
+* Delete course
+* Add subjects
+* Assign subjects to faculty
+* Assign subjects to students
+
+Subject fields:
+
+* Subject Code
+* Subject Name
+* Department
+* Semester
+* Credits
+* Faculty
+* Course
+
+---
+
+# 10. ATTENDANCE MANAGEMENT
+
+Create a complete attendance system.
+
+Faculty should be able to:
+
+1. Select department
+2. Select year
+3. Select section
+4. Select subject
+5. Select date
+6. Display student list
+7. Mark Present/Absent
+8. Save attendance
+
+Allow:
+
+* Edit attendance
+* View attendance history
+* Filter by date
+* Filter by subject
+* Calculate attendance percentage
+
+Attendance statuses:
+
+* Present
+* Absent
+* Late
+* On Duty
+
+Automatically calculate:
+
+**Attendance Percentage = Present Classes / Total Classes × 100**
+
+Display attendance using visual indicators.
+
+Example:
+
+* Above 85% → Good
+* 75–85% → Average
+* Below 75% → Low
+
+Students should be able to view their attendance.
+
+---
+
+# 11. TIMETABLE MANAGEMENT
+
+Create timetable management.
+
+Admin/faculty can manage:
+
+* Day
+* Period
+* Subject
+* Faculty
+* Classroom
+* Department
+* Year
+* Section
+
+Student dashboard should show the student's timetable.
+
+Create both:
+
+### Weekly timetable view
+
+and
+
+### Daily timetable view
+
+Avoid timetable conflicts.
+
+If the same faculty or classroom is already assigned during a period, display a validation error.
+
+---
+
+# 12. MARKS AND ACADEMIC PERFORMANCE
+
+Faculty can enter:
+
+* Internal marks
+* Assignment marks
+* Practical marks
+* Model exam marks
+* Semester exam marks
+
+Automatically calculate:
+
+* Total marks
+* Average
+* Grade
+* Pass/Fail
+
+Create grade logic:
+
+A+
+A
+B+
+B
+C
+F
+
+Students can view their marks.
+
+Create academic performance charts.
+
+---
+
+# 13. ASSIGNMENT MANAGEMENT
+
+Faculty can:
+
+* Create assignments
+* Set title
+* Description
+* Subject
+* Due date
+* Maximum marks
+* Upload attachment
+
+Students can:
+
+* View assignments
+* Download attachments
+* Submit assignments
+* Upload files
+* View submission status
+
+Faculty can:
+
+* View submissions
+* Evaluate submissions
+* Enter marks
+* Add feedback
+
+Automatically show:
+
+* Submitted
+* Pending
+* Late
+
+---
+
+# 14. STUDY MATERIAL MANAGEMENT
+
+Faculty can upload:
+
+* PDF
+* PPT
+* DOC/DOCX
+* Images
+* ZIP files
+
+Students can:
+
+* View materials
+* Search materials
+* Filter by subject
+* Download materials
+
+Store file metadata securely.
+
+---
+
+# 15. ANNOUNCEMENT SYSTEM
+
+Admin and faculty can create announcements.
+
+Fields:
+
+* Title
+* Description
+* Department
+* Audience
+* Priority
+* Date
+* Expiry Date
+
+Priority:
+
+* Normal
+* Important
+* Urgent
+
+Students should see announcements on their dashboard.
+
+---
+
+# 16. CAMPUS EVENTS
+
+Create an events module.
+
+Admin can create:
+
+* Event name
+* Description
+* Date
+* Time
+* Venue
+* Organizer
+* Department
+* Registration limit
+
+Students can:
+
+* View events
+* Register for events
+* Cancel registration
+* View registered events
+
+Prevent duplicate registration.
+
+---
+
+# 17. COMPLAINT / SERVICE REQUEST SYSTEM
+
+Students can raise requests such as:
+
+* Academic issue
+* Hostel issue
+* Transport issue
+* Library issue
+* Infrastructure issue
+* IT support
+* Other
+
+Fields:
+
+* Request ID
+* Student
+* Category
+* Subject
+* Description
+* Attachment
+* Date
+* Priority
+* Status
+
+Statuses:
+
+* Submitted
+* Under Review
+* In Progress
+* Resolved
+* Rejected
+
+Students can track their requests.
+
+Admin/staff can update status and add remarks.
+
+---
+
+# 18. NOTIFICATION SYSTEM
+
+Create a notification center.
+
+Notifications should be generated for:
+
+* New announcement
+* Attendance shortage
+* Assignment deadline
+* Assignment evaluation
+* New event
+* Complaint status update
+* New study material
+* Important academic updates
+
+Display unread notification count.
+
+Allow users to:
+
+* Mark as read
+* Mark all as read
+* Delete notifications
+
+---
+
+# 19. AI FEATURES
+
+The project must contain meaningful AI functionality.
+
+Create an **AI Campus Assistant**.
+
+The AI assistant should allow students/faculty to ask questions related to campus services.
+
+Example questions:
+
+* "What is my attendance percentage?"
+* "Which assignments are due this week?"
+* "Show my timetable."
+* "Which subjects have low attendance?"
+* "What events are coming up?"
+* "How is my academic performance?"
+* "Give me suggestions to improve my marks."
+
+The assistant should use authenticated user data when appropriate.
+
+Do not expose another user's private data.
+
+---
+
+# 20. AI ACADEMIC PERFORMANCE ANALYSIS
+
+Create an AI-powered academic analysis module.
+
+Analyze:
+
+* Attendance
+* Internal marks
+* Assignment performance
+* Exam performance
+* Previous performance
+
+Generate:
+
+### Performance Level
+
+* Excellent
+* Good
+* Average
+* Needs Improvement
+
+### Recommendations
+
+For example:
+
+"Your attendance in Database Management is below the recommended level."
+
+"Your performance in Java has improved compared with the previous assessment."
+
+"Consider spending additional study time on subjects where your internal marks are low."
+
+AI recommendations must be clearly presented as recommendations, not guaranteed predictions.
+
+---
+
+# 21. AI ATTENDANCE RISK DETECTION
+
+Create a feature that identifies students at risk of attendance shortage.
+
+Analyze attendance percentage.
+
+Display:
+
+* Safe
+* Warning
+* Critical
+
+Example:
+
+Student A — 91% — Safe
+
+Student B — 79% — Warning
+
+Student C — 68% — Critical
+
+Admin and faculty should be able to view the list.
+
+---
+
+# 22. AI CAMPUS FAQ ASSISTANT
+
+Create a campus FAQ knowledge base.
+
+The assistant should answer questions about:
+
+* College timings
+* Library
+* Departments
+* Examination process
+* Attendance rules
+* Academic procedures
+* Events
+* Campus services
+
+Use a structured FAQ/database-backed approach.
+
+If AI API access is unavailable, implement a reliable fallback using the campus FAQ database and keyword/semantic matching.
+
+---
+
+# 23. SEARCH FUNCTIONALITY
+
+Implement global search.
+
+Users should be able to search:
+
+* Students
+* Faculty
+* Subjects
+* Courses
+* Announcements
+* Events
+* Study materials
+* Assignments
+* Complaints
+
+Include:
+
+* Search suggestions
+* Filters
+* Empty-state messages
+
+---
+
+# 24. REPORT GENERATION
+
+Admin should be able to generate reports.
+
+Reports:
+
+### Student Report
+
+* Student details
+* Department
+* Attendance
+* Academic performance
+
+### Attendance Report
+
+* Student
+* Subject
+* Total classes
+* Present
+* Absent
+* Percentage
+
+### Faculty Report
+
+### Complaint Report
+
+### Event Report
+
+### Academic Performance Report
+
+Allow export to:
+
+* CSV
+* PDF where practical
+
+---
+
+# 25. PROFILE MANAGEMENT
+
+Every user should have a profile page.
+
+Allow:
+
+* View profile
+* Edit profile
+* Change password
+* Upload profile photo
+* Update contact information
+
+Do not allow students to modify sensitive academic information.
+
+---
+
+# 26. RESPONSIVE DESIGN
+
+The application must work properly on:
+
+* Desktop
+* Laptop
+* Tablet
+* Mobile
+
+Use:
+
+* Responsive sidebar
+* Mobile navigation
+* Responsive tables
+* Responsive cards
+* Responsive charts
+* Responsive forms
+
+---
+
+# 27. UI DESIGN
+
+Create a modern college-management SaaS-style interface.
+
+Use:
+
+* Clean dashboard
+* Cards
+* Tables
+* Charts
+* Badges
+* Dialog boxes
+* Toast notifications
+* Breadcrumbs
+* Tabs
+* Dropdowns
+* Search bars
+* Loading states
+* Empty states
+
+Use consistent spacing and typography.
+
+Avoid excessive animations.
+
+Use icons appropriately.
+
+---
+
+# 28. DARK MODE
+
+Implement:
+
+* Light mode
+* Dark mode
+
+Store the user's preference.
+
+---
+
+# 29. DATABASE DESIGN
+
+Create a normalized PostgreSQL database.
+
+Minimum tables:
+
+### users
+
+* id
+* name
+* email
+* password_hash
+* role
+* status
+* created_at
+* updated_at
+
+### students
+
+* id
+* user_id
+* student_id
+* department_id
+* course_id
+* year
+* semester
+* section
+* phone
+* dob
+* address
+
+### faculty
+
+* id
+* user_id
+* faculty_id
+* department_id
+* designation
+* qualification
+
+### departments
+
+* id
+* name
+* code
+* hod
+
+### courses
+
+* id
+* name
+* code
+* department_id
+* duration
+
+### subjects
+
+* id
+* code
+* name
+* credits
+* semester
+* course_id
+
+### faculty_subjects
+
+* faculty_id
+* subject_id
+
+### attendance
+
+* id
+* student_id
+* subject_id
+* faculty_id
+* date
+* status
+
+### marks
+
+* id
+* student_id
+* subject_id
+* assessment_type
+* marks
+* max_marks
+
+### timetable
+
+* id
+* department_id
+* year
+* section
+* subject_id
+* faculty_id
+* classroom
+* day
+* period
+
+### assignments
+
+* id
+* subject_id
+* faculty_id
+* title
+* description
+* due_date
+* max_marks
+* attachment
+
+### submissions
+
+* id
+* assignment_id
+* student_id
+* submitted_at
+* file
+* marks
+* feedback
+
+### study_materials
+
+* id
+* subject_id
+* faculty_id
+* title
+* description
+* file
+* created_at
+
+### announcements
+
+* id
+* title
+* content
+* audience
+* department_id
+* priority
+* created_at
+* expires_at
+
+### events
+
+* id
+* title
+* description
+* date
+* time
+* venue
+* organizer
+* capacity
+
+### event_registrations
+
+* id
+* event_id
+* student_id
+* registered_at
+
+### complaints
+
+* id
+* student_id
+* category
+* title
+* description
+* priority
+* status
+* admin_remark
+* created_at
+* updated_at
+
+### notifications
+
+* id
+* user_id
+* title
+* message
+* type
+* is_read
+* created_at
+
+### faq
+
+* id
+* question
+* answer
+* category
+* keywords
+
+Create proper foreign keys and indexes.
+
+---
+
+# 30. API DESIGN
+
+Create clean REST APIs.
+
+Examples:
+
+POST /api/auth/login
+
+POST /api/auth/logout
+
+GET /api/students
+
+POST /api/students
+
+PUT /api/students/:id
+
+DELETE /api/students/:id
+
+GET /api/faculty
+
+POST /api/attendance
+
+GET /api/attendance/student/:id
+
+GET /api/attendance/subject/:id
+
+POST /api/marks
+
+GET /api/marks/student/:id
+
+GET /api/timetable
+
+POST /api/timetable
+
+GET /api/assignments
+
+POST /api/assignments
+
+POST /api/submissions
+
+GET /api/announcements
+
+POST /api/announcements
+
+GET /api/events
+
+POST /api/events
+
+POST /api/events/:id/register
+
+GET /api/complaints
+
+POST /api/complaints
+
+PUT /api/complaints/:id/status
+
+GET /api/notifications
+
+PUT /api/notifications/:id/read
+
+POST /api/ai/chat
+
+POST /api/ai/performance-analysis
+
+---
+
+# 31. SECURITY
+
+Implement:
+
+* Password hashing
+* Authentication middleware
+* Role-based authorization
+* Protected API routes
+* Input validation
+* SQL injection prevention through ORM/parameterized queries
+* XSS protection
+* Secure file upload validation
+* File type restrictions
+* Proper error handling
+* No sensitive information in frontend
+* Environment variables for secrets
+
+Never expose API keys in frontend code.
+
+---
+
+# 32. AI API CONFIGURATION
+
+If an AI API is available, configure it through environment variables.
+
+Example:
+
+AI_API_KEY
+
+Do NOT hard-code API keys.
+
+Create an `.env.example` file showing required variables.
+
+If the API key is not available, the application must still run using fallback/mock AI logic.
+
+Do not make the entire application dependent on an unavailable AI API.
+
+---
+
+# 33. SAMPLE DATA
+
+Create realistic demo data.
+
+Include:
+
+### Admin
+
+Email:
+[admin@smartcampus.com](mailto:admin@smartcampus.com)
+
+Password:
+Admin@123
+
+### Faculty
+
+Email:
+[faculty@smartcampus.com](mailto:faculty@smartcampus.com)
+
+Password:
+Faculty@123
+
+### Student
+
+Email:
+[student@smartcampus.com](mailto:student@smartcampus.com)
+
+Password:
+Student@123
+
+### Staff
+
+Email:
+[staff@smartcampus.com](mailto:staff@smartcampus.com)
+
+Password:
+Staff@123
+
+Create at least:
+
+* 4 departments
+* 10 faculty
+* 30 students
+* 20 subjects
+* Attendance records
+* Marks
+* Assignments
+* Announcements
+* Events
+* Complaints
+* FAQs
+* Notifications
+
+Clearly label these as demo credentials.
+
+---
+
+# 34. ERROR HANDLING
+
+Every API must return proper error responses.
+
+Frontend should display user-friendly messages.
+
+Examples:
+
+"Invalid email or password."
+
+"Student already exists."
+
+"Attendance saved successfully."
+
+"Unable to upload file."
+
+"Unauthorized access."
+
+"Assignment deadline has passed."
+
+Use toast notifications for successful operations.
+
+---
+
+# 35. LOADING STATES
+
+Implement loading indicators for:
+
+* Login
+* Dashboard
+* Tables
+* API requests
+* AI responses
+* File uploads
+* Report generation
+
+Do not leave blank screens while data is loading.
+
+---
+
+# 36. EMPTY STATES
+
+Every list/table should have a useful empty state.
+
+Example:
+
+"No students found."
+
+"No assignments available."
+
+"No notifications."
+
+"No complaints found."
+
+---
+
+# 37. PROJECT NAVIGATION
+
+Admin sidebar:
+
+Dashboard
+Students
+Faculty
+Departments
+Courses
+Subjects
+Attendance
+Timetable
+Marks
+Assignments
+Study Materials
+Announcements
+Events
+Complaints
+Reports
+AI Assistant
+Notifications
+Settings
+
+Faculty sidebar:
+
+Dashboard
+My Subjects
+Students
+Attendance
+Marks
+Assignments
+Study Materials
+Announcements
+Timetable
+AI Assistant
+Notifications
+Profile
+
+Student sidebar:
+
+Dashboard
+My Profile
+Timetable
+Attendance
+Marks
+Assignments
+Study Materials
+Announcements
+Events
+Complaints
+Notifications
+AI Assistant
+Academic Insights
+
+Staff sidebar:
+
+Dashboard
+Requests
+Complaints
+Events
+Announcements
+Reports
+Notifications
+Profile
+
+---
+
+# 38. DASHBOARD PERSONALIZATION
+
+Each role must see relevant information.
+
+Student dashboard should show:
+
+* Attendance percentage
+* Current CGPA/average
+* Pending assignments
+* Upcoming classes
+* Upcoming events
+* Recent announcements
+* Attendance warnings
+* AI recommendations
+
+Faculty dashboard:
+
+* Assigned subjects
+* Today's classes
+* Attendance pending
+* Assignment submissions
+* Student performance
+* Recent announcements
+
+Admin dashboard:
+
+* Overall campus statistics
+* Student/faculty statistics
+* Attendance analytics
+* Performance analytics
+* Complaint analytics
+* Event statistics
+
+---
+
+# 39. AUDIT LOG
+
+Create an audit log for important actions.
+
+Track:
+
+* Login
+* Logout
+* Student creation
+* Student update
+* Student deletion
+* Attendance update
+* Marks update
+* Complaint status update
+* Announcement creation
+
+Store:
+
+* User
+* Action
+* Entity
+* Timestamp
+* IP if appropriate
+
+Admin can view audit logs.
+
+---
+
+# 40. TESTING
+
+Create basic tests for important functionality.
+
+Test:
+
+* Login
+* Authentication
+* Role authorization
+* Student CRUD
+* Attendance calculation
+* Marks calculation
+* Assignment submission
+* Event registration
+* Complaint creation
+* Notification creation
+* AI fallback
+
+Fix all errors before considering the project complete.
+
+---
+
+# 41. README
+
+Create a detailed README.md containing:
+
+1. Project title
+2. Project description
+3. Features
+4. Technology stack
+5. System architecture
+6. Database structure
+7. Installation instructions
+8. Environment variables
+9. How to run
+10. Demo credentials
+11. API documentation
+12. AI features
+13. Testing instructions
+14. Future enhancements
+
+---
+
+# 42. IMPORTANT DEVELOPMENT RULES
+
+Follow these rules strictly:
+
+1. Do not build only a frontend prototype.
+2. Do not use hard-coded data for core functionality.
+3. Use PostgreSQL for persistent data.
+4. Connect frontend to backend APIs.
+5. Implement actual CRUD operations.
+6. Implement actual authentication.
+7. Implement role-based authorization.
+8. Use reusable React components.
+9. Keep code modular.
+10. Validate all forms.
+11. Handle API errors.
+12. Add loading states.
+13. Add empty states.
+14. Make the application responsive.
+15. Keep UI professional.
+16. Do not expose secrets.
+17. Use environment variables.
+18. Create database migrations/schema.
+19. Create seed/demo data.
+20. Make the application runnable directly in Replit.
+
+---
+
+# 43. DEVELOPMENT ORDER
+
+Build the project in this order:
+
+### Phase 1
+
+Set up:
+
+* React
+* Backend
+* PostgreSQL
+* ORM
+* Tailwind
+* Project structure
+
+### Phase 2
+
+Implement:
+
+* Database schema
+* Migrations
+* Seed data
+
+### Phase 3
+
+Implement:
+
+* Authentication
+* Roles
+* Protected routes
+
+### Phase 4
+
+Implement:
+
+* Admin dashboard
+* Student management
+* Faculty management
+* Department management
+* Course/subject management
+
+### Phase 5
+
+Implement:
+
+* Attendance
+* Marks
+* Timetable
+* Assignments
+* Study materials
+
+### Phase 6
+
+Implement:
+
+* Announcements
+* Events
+* Complaints
+* Notifications
+
+### Phase 7
+
+Implement:
+
+* AI Campus Assistant
+* AI Performance Analysis
+* Attendance Risk Detection
+* FAQ Assistant
+
+### Phase 8
+
+Implement:
+
+* Reports
+* Search
+* Audit logs
+* Profile
+* Settings
+
+### Phase 9
+
+Testing:
+
+* Fix frontend errors
+* Fix backend errors
+* Fix database errors
+* Test all roles
+* Test all CRUD operations
+* Test responsive design
+
+### Phase 10
+
+Final:
+
+* Improve UI
+* Add demo data
+* Complete README
+* Verify Replit deployment
+* Make sure there are no broken links/buttons/routes
+
+---
+
+# 44. FINAL ACCEPTANCE CRITERIA
+
+The project is complete only when:
+
+✅ User can register/login
+✅ Role-based dashboards work
+✅ Admin can manage students
+✅ Admin can manage faculty
+✅ Admin can manage departments
+✅ Admin can manage subjects
+✅ Faculty can mark attendance
+✅ Students can view attendance
+✅ Faculty can enter marks
+✅ Students can view marks
+✅ Faculty can create assignments
+✅ Students can submit assignments
+✅ Faculty can evaluate assignments
+✅ Faculty can upload materials
+✅ Students can download materials
+✅ Admin/faculty can publish announcements
+✅ Students can view announcements
+✅ Admin can create events
+✅ Students can register for events
+✅ Students can raise complaints
+✅ Staff/admin can process complaints
+✅ Notifications work
+✅ Search works
+✅ Reports work
+✅ AI assistant works
+✅ AI fallback works without API key
+✅ Academic recommendations work
+✅ Attendance risk detection works
+✅ Database persists data
+✅ Authentication is secure
+✅ Role permissions are enforced
+✅ Mobile responsive design works
+✅ Dark mode works
+✅ Error handling works
+✅ Loading states work
+✅ Demo accounts work
+✅ README is complete
+✅ Application runs successfully on Replit
+
+---
+
+# 45. START NOW
+
+Start by analyzing the complete requirements above.
+
+Then:
+
+1. Create the project structure.
+2. Set up the database.
+3. Create the schema.
+4. Create migrations.
+5. Create seed data.
+6. Build authentication.
+7. Build role-based layouts.
+8. Build dashboards.
+9. Build backend APIs.
+10. Connect frontend to APIs.
+11. Implement every module.
+12. Implement AI features.
+13. Test every major workflow.
+14. Fix errors automatically.
+15. Make the UI professional and responsive.
+16. Prepare the application for Replit deployment.
+
+Do not stop after creating the initial UI.
+
+Continue implementing the backend, database, authentication, APIs and functionality until the complete application described above is working.
+
+When something cannot be implemented exactly as specified because of a missing external service, implement the best functional fallback and document it.
+
+**Priority: FUNCTIONALITY > VISUAL EFFECTS.**
+
+The final result should look and behave like a real college campus management product suitable for a final-year academic project demonstration.
