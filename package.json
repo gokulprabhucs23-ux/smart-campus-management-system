@@ -1,0 +1,25 @@
+{
+  "name": "smart-campus-management-system",
+  "version": "1.0.0",
+  "description": "AI-Enabled Smart Campus Management System with Spring Boot, MongoDB, and React",
+  "scripts": {
+    "dev": "./start.sh",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "start": "./start.sh",
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "export PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" && cd backend && java -jar target/smart-campus-backend-1.0.0.jar",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "export PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" && cd backend && mvn clean package -DskipTests",
+    "build": "npm run build:frontend && npm run build:backend"
+  },
+  "keywords": [
+    "smart-campus",
+    "react",
+    "spring-boot",
+    "mongodb",
+    "ai",
+    "autonomous-agent"
+  ],
+  "author": "Smart Campus Team",
+  "license": "MIT"
+}
