@@ -7,6 +7,9 @@ out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
+target/
+*.class
+*.jar
 
 # dependencies
 node_modules
@@ -35,6 +38,7 @@ node_modules
 npm-debug.log
 yarn-error.log
 testem.log
+*.log
 /typings
 
 # System Files
@@ -47,3 +51,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit-artifact/
+scratch/
