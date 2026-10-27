@@ -558,16 +558,22 @@ public class CampusSemanticEngine {
             answer.append("### 📝 Course Academic Performance & Grade Distribution\n\n");
             answer.append("As Faculty (**").append(facName).append("**), here is the performance breakdown for courses under your purview:\n\n");
 
-            List<Subject> mySubs = subjectRepository.findByDepartment(facDept);
+            String cleanFacUser = (username != null ? username : "").toLowerCase().trim();
+            List<Subject> mySubs = subjectRepository.findAll().stream()
+                    .filter(s -> s.getFacultyUsername() != null && s.getFacultyUsername().equalsIgnoreCase(cleanFacUser))
+                    .toList();
+
             if (!mySubs.isEmpty()) {
                 answer.append("| Course Code | Subject Name | Credits | Semester | Enrolled | Pass Rate |\n");
                 answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
-                for (Subject sub : mySubs.stream().limit(5).toList()) {
+                for (Subject sub : mySubs) {
                     answer.append("| `").append(sub.getCode()).append("` | ").append(sub.getName()).append(" | ")
                           .append(sub.getCredits()).append(" | Sem ").append(sub.getSemester()).append(" | 25 | 96% |\n");
                 }
                 answer.append("\n");
-                answer.append("📌 *Internal Assessment*: Mid-term evaluations are due before end of month. Navigate to **Grades & Marks** in the portal to submit final scores.");
+                answer.append("📌 *Internal Assessment*: Mid-term evaluations are active. Navigate to **Grades & Marks** in the portal to submit final scores.");
+            } else {
+                answer.append("No active course marks found for your faculty account.");
             }
 
             suggestions.add("Summarize attendance across my subjects");
@@ -599,16 +605,43 @@ public class CampusSemanticEngine {
 
         // 5. TEACHING TIMETABLE FOR FACULTY
         else if (query.contains("timetable") || query.contains("schedule") || query.contains("routine") || query.contains("period")) {
-            List<TimetableEntry> entries = timetableRepository.findByDepartmentAndSemesterOrderByPeriodAsc(facDept, 1);
+            String cleanFacUser = (username != null ? username : "").toLowerCase().trim();
+            List<TimetableEntry> allocated = timetableRepository.findAll().stream()
+                    .filter(s -> {
+                        if (s.getFacultyUsername() != null && s.getFacultyUsername().equalsIgnoreCase(cleanFacUser)) return true;
+                        if (s.getFacultyName() != null && s.getFacultyName().equalsIgnoreCase(facName)) return true;
+                        if (!cleanFacUser.isEmpty() && s.getFacultyUsername() != null && s.getFacultyUsername().toLowerCase().contains(cleanFacUser)) return true;
+                        return false;
+                    })
+                    .sorted(Comparator.comparing(TimetableEntry::getDay).thenComparing(TimetableEntry::getPeriod))
+                    .toList();
 
             answer.append("### 📅 Faculty Teaching Timetable: **").append(facName).append("**\n\n");
-            answer.append("Weekly assigned lecture periods for **").append(facDept).append("**:\n\n");
-            answer.append("| Period | Time Slot | Course | Room | Session Type |\n");
-            answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
-            answer.append("| Period 1 | `09:00 AM - 09:45 AM` | CS101: Problem Solving & Python | Room 101 | Lecture |\n");
-            answer.append("| Period 3 | `10:45 AM - 11:30 AM` | CS101: Problem Solving & Python | Lab 1 | Hands-on Lab |\n");
-            answer.append("| Period 5 | `01:00 PM - 01:45 PM` | CS201: Data Structures | Room 102 | Tutorial |\n\n");
-            answer.append("💡 *Note: Recess is 12:15 PM – 01:00 PM daily.*");
+
+            Optional<Subject> mySubject = subjectRepository.findAll().stream()
+                    .filter(s -> s.getFacultyUsername() != null && s.getFacultyUsername().equalsIgnoreCase(cleanFacUser))
+                    .findFirst();
+
+            if (mySubject.isPresent()) {
+                Subject sub = mySubject.get();
+                answer.append("You are the dedicated professor for **").append(sub.getCode()).append(" - ").append(sub.getName())
+                      .append("** (").append(sub.getDepartment()).append(" Semester ").append(sub.getSemester()).append(").\n\n");
+            }
+
+            if (!allocated.isEmpty()) {
+                answer.append("Your allocated weekly teaching routine (Monday–Saturday, 45-min periods):\n\n");
+                answer.append("| Day | Period | Time Slot | Course | Room | Session Type |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (TimetableEntry te : allocated) {
+                    answer.append("| ").append(te.getDay()).append(" | Period ").append(te.getPeriod()).append(" | `")
+                          .append(te.getStartTime()).append(" - ").append(te.getEndTime()).append("` | ")
+                          .append(te.getSubjectCode()).append(": ").append(te.getSubjectName()).append(" | ")
+                          .append(te.getRoom()).append(" | ").append(te.getType() != null ? te.getType() : "lecture").append(" |\n");
+                }
+                answer.append("\n💡 *Recess: 10:30–10:45 AM, Lunch: 12:15–01:00 PM. Periods not listed above are dedicated office hours.*");
+            } else {
+                answer.append("No active lecture periods currently allocated for ").append(facName).append(" in the timetable.");
+            }
 
             suggestions.add("Summarize attendance across my subjects");
             suggestions.add("Show students with attendance below 75%");
@@ -1034,6 +1067,39 @@ public class CampusSemanticEngine {
                 }
             }
             suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
+        }
+
+        // =====================================================================
+        // STUDENT FEATURE 10: ENROLLED SUBJECTS & DEDICATED PROFESSORS
+        // =====================================================================
+        else if (query.contains("subject") || query.contains("course") || query.contains("curriculum") || query.contains("professor") || query.contains("faculty") || query.contains("teacher")) {
+            String dept = activeStudent != null ? activeStudent.getDepartment() : "CSE";
+            int sem = activeStudent != null && activeStudent.getSemester() != null ? activeStudent.getSemester() : 1;
+
+            List<Subject> mySubs = subjectRepository.findByDepartmentAndSemester(dept, sem);
+            if (mySubs.isEmpty()) {
+                mySubs = subjectRepository.findByDepartment(dept);
+            }
+
+            answer.append("### 📚 Your Enrolled Subjects: **Semester ").append(sem).append("** (").append(dept).append(")\n\n");
+            answer.append("In accordance with university regulations, you have **").append(mySubs.size()).append(" core subjects** for this semester. ");
+            answer.append("Each subject is instructed by its dedicated subject professor:\n\n");
+
+            if (!mySubs.isEmpty()) {
+                answer.append("| Course Code | Subject Name | Credits | Dedicated Professor | Designation | Contact |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (Subject sub : mySubs) {
+                    answer.append("| `").append(sub.getCode()).append("` | **").append(sub.getName()).append("** | ")
+                          .append(sub.getCredits()).append(" Credits | ").append(sub.getFaculty()).append(" | ")
+                          .append(sub.getFacultyDesignation() != null ? sub.getFacultyDesignation() : "Professor").append(" | `")
+                          .append(sub.getFacultyEmail() != null ? sub.getFacultyEmail() : sub.getFacultyUsername() + "@meridian.edu").append("` |\n");
+                }
+                answer.append("\n💡 *Your weekly class timetable contains lectures and laboratory sessions strictly for these 5 subjects.*");
+            }
+
+            suggestions.add("What is my timetable for today?");
             suggestions.add("How is my attendance and how many classes can I skip?");
             suggestions.add("What assignments are due this week?");
         }

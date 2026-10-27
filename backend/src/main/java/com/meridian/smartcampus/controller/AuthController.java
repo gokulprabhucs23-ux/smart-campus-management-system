@@ -1,12 +1,17 @@
 package com.meridian.smartcampus.controller;
 
+import com.meridian.smartcampus.model.Student;
+import com.meridian.smartcampus.model.Subject;
 import com.meridian.smartcampus.model.User;
+import com.meridian.smartcampus.repository.StudentRepository;
+import com.meridian.smartcampus.repository.SubjectRepository;
 import com.meridian.smartcampus.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -15,9 +20,58 @@ import java.util.Optional;
 public class AuthController {
 
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
+    private final SubjectRepository subjectRepository;
 
-    public AuthController(UserRepository userRepository) {
+    public AuthController(UserRepository userRepository,
+                          StudentRepository studentRepository,
+                          SubjectRepository subjectRepository) {
         this.userRepository = userRepository;
+        this.studentRepository = studentRepository;
+        this.subjectRepository = subjectRepository;
+    }
+
+    private void enrichUserData(User user, Map<String, Object> targetMap) {
+        if (user == null) return;
+        targetMap.put("id", user.getNumericId() != null ? user.getNumericId() : 1L);
+        targetMap.put("mongoId", user.getId());
+        targetMap.put("username", user.getUsername());
+        targetMap.put("name", user.getName());
+        targetMap.put("email", user.getEmail());
+        targetMap.put("role", user.getRole());
+        targetMap.put("department", user.getDepartment());
+
+        if ("student".equalsIgnoreCase(user.getRole())) {
+            Optional<Student> studentOpt = studentRepository.findByEmail(user.getEmail());
+            if (studentOpt.isEmpty()) {
+                studentOpt = studentRepository.findAll().stream()
+                        .filter(s -> s.getEmail() != null && s.getEmail().toLowerCase().startsWith(user.getUsername().toLowerCase() + "@"))
+                        .findFirst();
+            }
+            if (studentOpt.isPresent()) {
+                Student st = studentOpt.get();
+                targetMap.put("studentId", st.getStudentId());
+                targetMap.put("semester", st.getSemester());
+                targetMap.put("year", st.getYear());
+                targetMap.put("section", st.getSection());
+                targetMap.put("attendance", st.getAttendance());
+            } else {
+                targetMap.put("semester", 1);
+                targetMap.put("year", 1);
+                targetMap.put("section", "A");
+            }
+        } else if ("faculty".equalsIgnoreCase(user.getRole())) {
+            List<Subject> mySubs = subjectRepository.findAll().stream()
+                    .filter(s -> s.getFacultyUsername() != null && s.getFacultyUsername().equalsIgnoreCase(user.getUsername()))
+                    .toList();
+            if (!mySubs.isEmpty()) {
+                Subject sub = mySubs.get(0);
+                targetMap.put("subjectCode", sub.getCode());
+                targetMap.put("subjectName", sub.getName());
+                targetMap.put("subjectSemester", sub.getSemester());
+                targetMap.put("subjectDepartment", sub.getDepartment());
+            }
+        }
     }
 
     @PostMapping("/auth/login")
@@ -47,13 +101,7 @@ public class AuthController {
         }
 
         Map<String, Object> userData = new HashMap<>();
-        userData.put("id", user.getNumericId() != null ? user.getNumericId() : 1L);
-        userData.put("mongoId", user.getId());
-        userData.put("username", user.getUsername());
-        userData.put("name", user.getName());
-        userData.put("email", user.getEmail());
-        userData.put("role", user.getRole());
-        userData.put("department", user.getDepartment());
+        enrichUserData(user, userData);
 
         Map<String, Object> response = new HashMap<>();
         response.put("token", "token_" + user.getUsername() + "_" + System.currentTimeMillis());
@@ -84,13 +132,7 @@ public class AuthController {
 
         Map<String, Object> resp = new HashMap<>();
         if (user != null) {
-            resp.put("id", user.getNumericId() != null ? user.getNumericId() : 1L);
-            resp.put("mongoId", user.getId());
-            resp.put("username", user.getUsername());
-            resp.put("name", user.getName());
-            resp.put("email", user.getEmail());
-            resp.put("role", user.getRole());
-            resp.put("department", user.getDepartment());
+            enrichUserData(user, resp);
         } else {
             String role = userRole != null ? userRole.toLowerCase().trim() : "student";
             resp.put("id", 1L);
@@ -99,6 +141,9 @@ public class AuthController {
             resp.put("email", role + "@meridian.edu");
             resp.put("role", role);
             resp.put("department", "CSE");
+            resp.put("semester", 1);
+            resp.put("year", 1);
+            resp.put("section", "A");
         }
 
         return ResponseEntity.ok(resp);

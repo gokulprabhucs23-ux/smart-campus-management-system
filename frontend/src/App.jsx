@@ -54,6 +54,9 @@ import {
   ShieldCheck,
   Sliders,
   Sparkles,
+  TrendingUp,
+  BarChart3,
+  Layers,
   Trash2,
   Upload,
   UserRound,
@@ -1930,9 +1933,17 @@ function Subjects() {
   const me = useGetMe();
   const role = me.data?.role || "student";
   const userDept = me.data?.department || "CSE";
-  const [selectedSemester, setSelectedSemester] = useState("all");
+  const userSem = me.data?.semester || 1;
+  const [selectedSemester, setSelectedSemester] = useState(role === "student" ? String(userSem) : "all");
   const [selectedDept, setSelectedDept] = useState(role === "student" ? userDept : "all");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (role === "student") {
+      if (me.data?.department) setSelectedDept(me.data.department);
+      if (me.data?.semester) setSelectedSemester(String(me.data.semester));
+    }
+  }, [me.data?.department, me.data?.semester, role]);
 
   const q = useListSubjects();
   const rawList = q.data ?? [];
@@ -2015,8 +2026,15 @@ function Subjects() {
 
         {/* Semester Filter Tabs (1 to 8) */}
         <div className="mt-4 border-t border-border pt-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Engineering Semester (4-Year B.Tech Program):
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Engineering Semester (4-Year B.Tech Program):
+            </div>
+            {role === "student" && me.data?.semester && (
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                You are enrolled in Semester {me.data.semester}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button
@@ -2031,23 +2049,55 @@ function Subjects() {
             </button>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => {
               const yr = Math.ceil(sem / 2);
+              const isMySem = role === "student" && me.data?.semester === sem;
               return (
                 <button
                   key={sem}
                   onClick={() => setSelectedSemester(String(sem))}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                     selectedSemester === String(sem)
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "bg-muted/60 text-muted-foreground hover:bg-muted"
                   }`}
                 >
-                  Sem {sem} (Yr {yr})
+                  Sem {sem} (Yr {yr}) {isMySem ? "★" : ""}
                 </button>
               );
             })}
           </div>
         </div>
       </Card>
+
+      {/* Curriculum Context Ribbon */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex items-center gap-3">
+          <div className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground font-bold">
+            <BookOpen className="size-5" />
+          </div>
+          <div>
+            <div className="font-bold text-sm text-foreground flex items-center gap-2">
+              <span>{selectedDept} · {selectedSemester === "all" ? "Full 8-Semester Curriculum" : `Semester ${selectedSemester} Courses`}</span>
+              {selectedSemester !== "all" && (
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                  5 Core Subjects
+                </span>
+              )}
+              {role === "student" && me.data?.semester && String(me.data.semester) === selectedSemester && (
+                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  ★ Your Active Semester
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {role === "faculty"
+                ? "Showing strictly the single course assigned to you as dedicated professor."
+                : selectedSemester === "all"
+                ? "Every semester comprises strictly 5 department subjects, each taught by a dedicated professor."
+                : `Semester ${selectedSemester} comprises 5 specialized ${selectedDept} subjects, each instructed by its dedicated professor.`}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Subjects Grid */}
       {q.isLoading ? (
@@ -2246,6 +2296,16 @@ function Timetable() {
     role === "faculty" ? (me.data?.username || "teacher1cse") : "teacher1cse"
   );
 
+  useEffect(() => {
+    if (role === "student") {
+      if (me.data?.department) setSelectedDept(me.data.department);
+      if (me.data?.semester) setSelectedSem(me.data.semester);
+    } else if (role === "faculty") {
+      if (me.data?.username) setTargetTeacher(me.data.username);
+      if (me.data?.department) setSelectedDept(me.data.department);
+    }
+  }, [me.data, role]);
+
   // Edit / Add Slot Modal State for Admin
   const [modalOpen, setModalOpen] = useState(false);
   const [slotData, setSlotData] = useState(null);
@@ -2254,6 +2314,11 @@ function Timetable() {
 
   const subjectsQuery = useListSubjects();
   const facultyQuery = useListFaculty();
+
+  // Distinct subjects strictly enrolled for the selected department & semester (5 subjects)
+  const currentSemesterSubjects = (subjectsQuery.data || []).filter(
+    (s) => (s.department || "").toUpperCase() === (selectedDept || "").toUpperCase() && s.semester === Number(selectedSem)
+  );
 
   // Student / Department timetable query
   const deptQuery = useQuery({
@@ -2415,7 +2480,6 @@ function Timetable() {
                   <select
                     value={selectedDept}
                     onChange={(e) => setSelectedDept(e.target.value)}
-                    disabled={role === "student"}
                     className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium focus:border-primary focus:outline-none"
                   >
                     <option value="CSE">CSE (Computer Science)</option>
@@ -2431,12 +2495,11 @@ function Timetable() {
                   <select
                     value={selectedSem}
                     onChange={(e) => setSelectedSem(Number(e.target.value))}
-                    disabled={role === "student"}
                     className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium focus:border-primary focus:outline-none"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                       <option key={sem} value={sem}>
-                        Semester {sem} (Year {Math.ceil(sem / 2)})
+                        Semester {sem} (Year {Math.ceil(sem / 2)}) {role === "student" && me.data?.semester === sem ? "★ Your Active Semester" : ""}
                       </option>
                     ))}
                   </select>
@@ -2455,6 +2518,7 @@ function Timetable() {
                 >
                   {(facultyQuery.data || [
                     { username: "teacher1cse", name: "Dr. Alan Turing" },
+                    { username: "teacher26cse", name: "Dr. Marvin Minsky" },
                     { username: "teacher1eee", name: "Dr. Michael Faraday" },
                   ]).map((f) => (
                     <option key={f.username || f.id} value={f.username || f.facultyId}>
@@ -2497,6 +2561,12 @@ function Timetable() {
             <span>6 Days (Mon–Sat)</span>
             <span>•</span>
             <span>7 Periods/Day (45 min each)</span>
+            {viewMode === "department" && (
+              <>
+                <span>•</span>
+                <span className="font-semibold text-primary">Strictly {currentSemesterSubjects.length || 5} Enrolled Subjects</span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span className="rounded bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
@@ -2508,6 +2578,35 @@ function Timetable() {
           </div>
         </div>
       </Card>
+
+      {/* 5 Enrolled Subjects Pill Ribbon */}
+      {viewMode === "department" && currentSemesterSubjects.length > 0 && (
+        <Card className="mb-6 p-4 border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 mb-2.5">
+            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <BookOpen className="size-3.5 text-primary" />
+              <span>{selectedDept} Semester {selectedSem} Curriculum ({currentSemesterSubjects.length} Subjects):</span>
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              This timetable consists strictly of these {currentSemesterSubjects.length} subjects &amp; dedicated professors
+            </span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {currentSemesterSubjects.map((sub) => (
+              <div key={sub.code} className="rounded-lg border border-border/70 bg-muted/30 p-2.5 text-xs transition-all hover:border-primary/40 hover:bg-muted/50">
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-mono font-bold text-primary">{sub.code}</span>
+                  <span className="text-[10px] text-muted-foreground">{sub.credits} Credits</span>
+                </div>
+                <div className="font-semibold text-foreground truncate" title={sub.name}>{sub.name}</div>
+                <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 truncate" title={sub.faculty}>
+                  <span>👨‍🏫 {sub.faculty}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* TEACHER TIMETABLE VIEW (Dedicated empty space for unallocated slots) */}
       {viewMode === "teacher" && (
@@ -3194,12 +3293,22 @@ function Attendance() {
 function Marks() {
   const me = useGetMe();
   const isFaculty = me.data?.role === "faculty";
+  const activeSem = Number(me.data?.semester || 1);
+  const activeDept = me.data?.department || "CSE";
+
   const [selectedSemester, setSelectedSemester] = useState("all");
+  const [hoveredSem, setHoveredSem] = useState(activeSem);
 
   const q = useListMarks();
   const save = useSaveMarks();
   const subjects = useListSubjects();
   const data = q.data;
+
+  const summaryQuery = useQuery({
+    queryKey: ["marks-summary", me.data?.username],
+    queryFn: () => customFetch("/api/marks/summary"),
+    enabled: !isFaculty,
+  });
 
   if (q.isLoading)
     return (
@@ -3285,20 +3394,68 @@ function Marks() {
     );
   }
 
-  const list = Array.isArray(data) ? data : [];
+  const rawList = Array.isArray(data) ? data : [];
+  // Restrict marks strictly to current and past semesters (never future)
+  const list = rawList.filter((m) => m.semester == null || m.semester <= activeSem);
 
-  // Filter marks by selected semester
+  // Compute allowed semesters: 1 up to activeSem (only current and history)
+  const historySemesters = Array.from({ length: Math.max(0, activeSem - 1) }, (_, i) => i + 1);
+  const allowedSemesters = Array.from({ length: activeSem }, (_, i) => i + 1);
+
+  // Process semester chart data
+  const summarySemesters = summaryQuery.data?.semesters || [];
+  const chartData = allowedSemesters.map((semNum) => {
+    const existing = summarySemesters.find((s) => s.semester === semNum);
+    const semMarks = list.filter((m) => m.semester === semNum);
+    const totalScore = semMarks.reduce((sum, m) => sum + (m.score || 0), 0);
+    const totalMax = semMarks.reduce((sum, m) => sum + (m.maxScore || 100), 0);
+    const computedPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 1000) / 10 : 88.0;
+    const computedSgpa = Math.round((computedPct / 10) * 10) / 10;
+
+    const isCurrent = semNum === activeSem;
+    return {
+      semester: semNum,
+      year: Math.ceil(semNum / 2),
+      sgpa: existing?.sgpa ?? computedSgpa,
+      cgpa: existing?.cgpa ?? computedSgpa,
+      percentage: existing?.percentage ?? computedPct,
+      credits: existing?.creditsEarned ?? 22,
+      type: isCurrent ? "current" : "history",
+      status: isCurrent ? "Ongoing" : "Passed",
+    };
+  });
+
+  const activeHoveredData = chartData.find((c) => c.semester === hoveredSem) || chartData[chartData.length - 1] || {
+    semester: activeSem,
+    year: Math.ceil(activeSem / 2),
+    sgpa: 8.8,
+    cgpa: 8.75,
+    percentage: 88.0,
+    credits: 22,
+    type: "current",
+    status: "Ongoing",
+  };
+
+  const currentCumulativeCgpa = chartData.length > 0 ? chartData[chartData.length - 1].cgpa : 8.75;
+  const totalCompletedCredits = historySemesters.length * 22;
+
+  // Filter marks based on selected tab
   const displayedMarks = list.filter((m) => {
     if (selectedSemester === "all") return true;
+    if (selectedSemester === "current") return m.semester === activeSem;
+    if (selectedSemester === "history") return m.semester != null && m.semester < activeSem;
     return m.semester != null && String(m.semester) === selectedSemester;
   });
+
+  const currentTermMarks = list.filter((m) => m.semester === activeSem);
+  const historyMarks = list.filter((m) => m.semester != null && m.semester < activeSem);
 
   const totalScores = displayedMarks.reduce((sum, m) => sum + (m.score || 0), 0);
   const totalMax = displayedMarks.reduce((sum, m) => sum + (m.maxScore || 100), 0);
   const avgPct = totalMax > 0 ? Math.round((totalScores / totalMax) * 100) : 88;
-  const sgpa = Math.round((avgPct / 10) * 10) / 10;
-  const passedCount = displayedMarks.filter(m => m.passed !== false).length;
-  const arrearsCount = displayedMarks.filter(m => m.passed === false).length;
+  const currentSgpa = Math.round((avgPct / 10) * 10) / 10;
+  const passedCount = displayedMarks.filter((m) => m.passed !== false).length;
+  const arrearsCount = displayedMarks.filter((m) => m.passed === false).length;
 
   const submit = () => {
     const first = list[0];
@@ -3315,12 +3472,52 @@ function Marks() {
       });
   };
 
+  // Helper SVG coordinates calculation for the graph
+  const svgW = 680;
+  const svgH = 220;
+  const padL = 50;
+  const padR = 40;
+  const padT = 30;
+  const padB = 40;
+  const plotW = svgW - padL - padR;
+  const plotH = svgH - padT - padB;
+  const minGpa = 6.0;
+  const maxGpa = 10.0;
+
+  const getY = (val) => {
+    const clamped = Math.max(minGpa, Math.min(maxGpa, val));
+    return padT + plotH - ((clamped - minGpa) / (maxGpa - minGpa)) * plotH;
+  };
+
+  const getX = (index) => {
+    if (chartData.length <= 1) return padL + plotW / 2;
+    return padL + (index / (chartData.length - 1)) * plotW;
+  };
+
+  // Construct smooth SVG path for Cumulative CGPA line
+  const cgpaPoints = chartData.map((d, i) => ({ x: getX(i), y: getY(d.cgpa) }));
+  let cgpaPath = "";
+  if (cgpaPoints.length === 1) {
+    cgpaPath = `M ${cgpaPoints[0].x - 30} ${cgpaPoints[0].y} L ${cgpaPoints[0].x + 30} ${cgpaPoints[0].y}`;
+  } else if (cgpaPoints.length > 1) {
+    cgpaPath = `M ${cgpaPoints[0].x} ${cgpaPoints[0].y}`;
+    for (let i = 0; i < cgpaPoints.length - 1; i++) {
+      const p0 = cgpaPoints[i];
+      const p1 = cgpaPoints[i + 1];
+      const cp1x = p0.x + (p1.x - p0.x) / 2;
+      const cp1y = p0.y;
+      const cp2x = p0.x + (p1.x - p0.x) / 2;
+      const cp2y = p1.y;
+      cgpaPath += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.y}`;
+    }
+  }
+
   return (
     <>
       <PageHead
         eyebrow="Academic Records"
-        title="Semester-Wise Marks"
-        description="Filter and track student scores, letter grades, and credits semester by semester."
+        title="Student Marks & Academic History"
+        description="Semester-wise classification of current academic assessments, verified university history, and cumulative CGPA progression."
         action={
           isFaculty ? (
             <button
@@ -3336,44 +3533,400 @@ function Marks() {
         }
       />
 
-      {/* Semester Tabs */}
-      <Card className="mb-6 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Select Semester:
+      {/* Top Academic Standing & Performance Metrics */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-5 border-l-4 border-l-primary flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <GraduationCap className="size-4 text-primary" /> Cumulative CGPA
+            </div>
+            <div className="mt-1.5 text-3xl font-extrabold text-foreground tracking-tight">
+              {currentCumulativeCgpa}
+              <span className="text-sm font-normal text-muted-foreground ml-1">/ 10.0</span>
+            </div>
+            <div className="mt-1 text-xs text-primary font-semibold flex items-center gap-1">
+              <Sparkles className="size-3" /> First Class with Distinction
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setSelectedSemester("all")}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                selectedSemester === "all"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              All Semesters
-            </button>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-              <button
-                key={sem}
-                onClick={() => setSelectedSemester(String(sem))}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  selectedSemester === String(sem)
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                Sem {sem} (Yr {Math.ceil(sem / 2)})
-              </button>
-            ))}
+          <div className="rounded-full bg-primary/10 p-3 text-primary">
+            <TrendingUp className="size-6" />
+          </div>
+        </Card>
+
+        <Card className="p-5 border-l-4 border-l-emerald-500 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Clock3 className="size-4 text-emerald-600" /> Current Term (Sem {activeSem})
+            </div>
+            <div className="mt-1.5 text-3xl font-extrabold text-emerald-600 tracking-tight">
+              {chartData.find((c) => c.semester === activeSem)?.sgpa || 8.8}
+              <span className="text-sm font-normal text-muted-foreground ml-1">SGPA</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground font-medium">
+              5 Core {activeDept} Subjects · Ongoing
+            </div>
+          </div>
+          <div className="rounded-full bg-emerald-500/10 p-3 text-emerald-600">
+            <Award className="size-6" />
+          </div>
+        </Card>
+
+        <Card className="p-5 border-l-4 border-l-blue-500 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <CheckCircle2 className="size-4 text-blue-600" /> Completed Credits
+            </div>
+            <div className="mt-1.5 text-3xl font-extrabold text-blue-600 tracking-tight">
+              {totalCompletedCredits}
+              <span className="text-sm font-normal text-muted-foreground ml-1">Credits</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground font-medium">
+              {historySemesters.length} Completed Semesters Cleared
+            </div>
+          </div>
+          <div className="rounded-full bg-blue-500/10 p-3 text-blue-600">
+            <BookOpen className="size-6" />
+          </div>
+        </Card>
+
+        <Card className="p-5 border-l-4 border-l-amber-500 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-amber-600" /> University Standing
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-foreground tracking-tight">
+              Zero Backlogs
+            </div>
+            <div className="mt-1 text-xs font-semibold text-emerald-600 flex items-center gap-1">
+              <Check className="size-3.5" /> 100% Courses Cleared
+            </div>
+          </div>
+          <div className="rounded-full bg-amber-500/10 p-3 text-amber-600">
+            <Layers className="size-6" />
+          </div>
+        </Card>
+      </div>
+
+      {/* Interactive Semester-Wise CGPA & SGPA Graph */}
+      <Card className="mb-6 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary flex items-center gap-1.5">
+                <BarChart3 className="size-3.5" /> Performance Analytics
+              </span>
+              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                Semesters 1 to {activeSem}
+              </span>
+            </div>
+            <h2 className="display mt-1.5 text-xl font-bold">
+              Semester-Wise CGPA & SGPA Progression Graph
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Visualizes term grade point averages (SGPA bars) alongside cumulative progression (CGPA curve). Hover over bars to inspect details.
+            </p>
+          </div>
+
+          {/* Interactive Tooltip Card for Active / Hovered Semester */}
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 sm:text-right min-w-[210px]">
+            <div className="flex items-center justify-between sm:justify-end gap-2 text-xs font-bold text-primary">
+              <span>Semester {activeHoveredData.semester} (Yr {activeHoveredData.year})</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                activeHoveredData.type === "current"
+                  ? "bg-emerald-500 text-white"
+                  : "bg-primary text-primary-foreground"
+              }`}>
+                {activeHoveredData.type === "current" ? "Current Term" : "Passed"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between sm:justify-end gap-3">
+              <span className="text-[11px] text-muted-foreground">Term SGPA: <b className="text-foreground">{activeHoveredData.sgpa}</b></span>
+              <span className="text-[11px] text-muted-foreground">Cumulative CGPA: <b className="text-primary font-bold">{activeHoveredData.cgpa}</b></span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Marks Avg: <b>{activeHoveredData.percentage}%</b> · Credits: <b>{activeHoveredData.credits}</b>
+            </div>
           </div>
         </div>
 
-        {/* Semester SGPA & Arrear Summary Banner */}
+        {/* SVG Visualization Canvas */}
+        <div className="mt-6 w-full overflow-x-auto">
+          <div className="min-w-[620px]">
+            <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-56 select-none">
+              <defs>
+                <linearGradient id="historyBarGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.85" />
+                  <stop offset="100%" stopColor="#4338ca" stopOpacity="0.4" />
+                </linearGradient>
+                <linearGradient id="currentBarGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#059669" stopOpacity="0.45" />
+                </linearGradient>
+                <linearGradient id="cgpaLineGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#38bdf8" />
+                  <stop offset="100%" stopColor="#ec4899" />
+                </linearGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+
+              {/* Horizontal Reference Grid Lines */}
+              {[6.0, 7.0, 8.0, 9.0, 10.0].map((val) => {
+                const y = getY(val);
+                const isDistinction = val === 8.0;
+                return (
+                  <g key={val}>
+                    <line
+                      x1={padL}
+                      y1={y}
+                      x2={svgW - padR}
+                      y2={y}
+                      stroke={isDistinction ? "#f59e0b" : "currentColor"}
+                      strokeOpacity={isDistinction ? 0.45 : 0.08}
+                      strokeDasharray={isDistinction ? "4,4" : undefined}
+                      strokeWidth={isDistinction ? 1.5 : 1}
+                    />
+                    <text
+                      x={padL - 10}
+                      y={y + 4}
+                      textAnchor="end"
+                      className="fill-muted-foreground text-[10px] font-mono"
+                    >
+                      {val.toFixed(1)}
+                    </text>
+                    {isDistinction && (
+                      <text
+                        x={svgW - padR - 5}
+                        y={y - 5}
+                        textAnchor="end"
+                        className="fill-amber-600 text-[9px] font-bold uppercase tracking-wider"
+                      >
+                        ★ 8.0 Distinction Line
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* SGPA Vertical Bars */}
+              {chartData.map((d, i) => {
+                const cx = getX(i);
+                const barWidth = 34;
+                const barY = getY(d.sgpa);
+                const barHeight = Math.max(12, padT + plotH - barY);
+                const isHovered = hoveredSem === d.semester;
+                const isCurrent = d.type === "current";
+
+                return (
+                  <g
+                    key={d.semester}
+                    className="cursor-pointer transition-opacity"
+                    onMouseEnter={() => setHoveredSem(d.semester)}
+                    onClick={() => setSelectedSemester(String(d.semester))}
+                  >
+                    {/* Bar Pillar */}
+                    <rect
+                      x={cx - barWidth / 2}
+                      y={barY}
+                      width={barWidth}
+                      height={barHeight}
+                      rx={6}
+                      fill={isCurrent ? "url(#currentBarGrad)" : "url(#historyBarGrad)"}
+                      stroke={isHovered ? (isCurrent ? "#10b981" : "#6366f1") : "transparent"}
+                      strokeWidth={2}
+                      className="transition-all duration-200"
+                      opacity={isHovered ? 1 : 0.85}
+                    />
+                    {/* SGPA Value on Top of Bar */}
+                    <text
+                      x={cx}
+                      y={barY - 7}
+                      textAnchor="middle"
+                      className={`text-[11px] font-bold font-mono ${
+                        isCurrent ? "fill-emerald-600" : "fill-foreground"
+                      }`}
+                    >
+                      {d.sgpa.toFixed(1)}
+                    </text>
+                    {/* Semester Axis Label */}
+                    <text
+                      x={cx}
+                      y={padT + plotH + 18}
+                      textAnchor="middle"
+                      className={`text-[11px] font-semibold ${
+                        isHovered || isCurrent ? "fill-primary font-bold" : "fill-muted-foreground"
+                      }`}
+                    >
+                      Sem {d.semester}
+                    </text>
+                    <text
+                      x={cx}
+                      y={padT + plotH + 30}
+                      textAnchor="middle"
+                      className="fill-muted-foreground/60 text-[9px]"
+                    >
+                      {isCurrent ? "(Ongoing)" : "(Passed)"}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Cumulative CGPA Spline Curve */}
+              {cgpaPath && (
+                <path
+                  d={cgpaPath}
+                  fill="none"
+                  stroke="url(#cgpaLineGrad)"
+                  strokeWidth={3}
+                  filter="url(#glow)"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Data Nodes for CGPA */}
+              {cgpaPoints.map((pt, i) => {
+                const d = chartData[i];
+                const isHovered = hoveredSem === d.semester;
+                return (
+                  <g
+                    key={i}
+                    className="cursor-pointer"
+                    onMouseEnter={() => setHoveredSem(d.semester)}
+                    onClick={() => setSelectedSemester(String(d.semester))}
+                  >
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r={isHovered ? 7 : 5}
+                      fill="#ffffff"
+                      stroke="#0284c7"
+                      strokeWidth={3}
+                      className="transition-all duration-200"
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {/* Legend & Guide */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-5">
+            <div className="flex items-center gap-2">
+              <span className="size-3.5 rounded bg-indigo-500/80" />
+              <span><b>Past SGPA:</b> Completed Semesters 1–{Math.max(1, activeSem - 1)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="size-3.5 rounded bg-emerald-500" />
+              <span><b>Current SGPA:</b> Active Term (Sem {activeSem})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1 w-6 rounded bg-gradient-to-r from-sky-400 to-pink-500" />
+              <span><b>CGPA Curve:</b> Cumulative Grade Trajectory</span>
+            </div>
+          </div>
+          <div className="text-[11px] text-muted-foreground italic">
+            💡 Click on any semester bar to filter that semester's subjects below.
+          </div>
+        </div>
+      </Card>
+
+      {/* Semester Classification Filter Navigation */}
+      <Card className="mb-6 p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Classify Marks By Term:
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Restricted to your current active semester and completed academic history.
+              </div>
+            </div>
+
+            {/* Top Classification Tabs */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedSemester("all")}
+                className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
+                  selectedSemester === "all"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                📋 All Records (Sem 1–{activeSem})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedSemester("current")}
+                className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  selectedSemester === "current" || selectedSemester === String(activeSem)
+                    ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30"
+                    : "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20"
+                }`}
+              >
+                <Clock3 className="size-3.5" /> ⚡ Current Term (Sem {activeSem} · Active)
+              </button>
+              {historySemesters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSemester("history")}
+                  className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    selectedSemester === "history"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/20"
+                  }`}
+                >
+                  <BookOpen className="size-3.5" /> 📜 Academic History ({historySemesters.length} Completed Sems)
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Individual Semester Quick Switcher (Strictly 1 to activeSem, NO future) */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-border">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1">
+              Jump To Semester:
+            </span>
+            {allowedSemesters.map((sem) => {
+              const isCurrent = sem === activeSem;
+              const isSelected = selectedSemester === String(sem);
+              return (
+                <button
+                  key={sem}
+                  type="button"
+                  onClick={() => setSelectedSemester(String(sem))}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1 font-mono ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : isCurrent
+                      ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 font-bold"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {isCurrent ? "⚡ " : "✓ "}Sem {sem}
+                  {isCurrent && <span className="ml-0.5 text-[10px] font-normal uppercase">(Active)</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selected Context Summary Strip */}
         <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-4">
           <div>
             <div className="text-[10px] font-bold uppercase text-muted-foreground">
-              {selectedSemester === "all" ? "Overall Average" : `Semester ${selectedSemester} Average`}
+              {selectedSemester === "all"
+                ? `Overall Program Average (Sem 1–${activeSem})`
+                : selectedSemester === "current"
+                ? `Current Term Average (Sem ${activeSem})`
+                : selectedSemester === "history"
+                ? `Completed History Average (Sem 1–${activeSem - 1})`
+                : `Semester ${selectedSemester} Average`}
             </div>
             <div className="mt-1 text-2xl font-bold text-foreground">
               {avgPct}%
@@ -3381,102 +3934,259 @@ function Marks() {
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase text-muted-foreground">
-              Semester SGPA
+              {selectedSemester === "all" ? "Cumulative CGPA" : "Term SGPA"}
             </div>
             <div className="mt-1 text-2xl font-bold text-primary">
-              {sgpa}
+              {selectedSemester === "all" ? currentCumulativeCgpa : currentSgpa}
             </div>
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase text-muted-foreground">
-              Passed Assessments
+              Evaluated Assessments
             </div>
             <div className="mt-1 text-2xl font-bold text-emerald-600">
-              {passedCount}
+              {passedCount} Passed
             </div>
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase text-muted-foreground">
-              Arrears / Backlogs
+              Standing / Backlogs
             </div>
-            <div className="mt-1 text-2xl font-bold text-rose-600">
-              {arrearsCount}
+            <div className="mt-1 text-2xl font-bold text-foreground flex items-center gap-1.5">
+              {arrearsCount === 0 ? (
+                <span className="text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="size-5" /> All Cleared
+                </span>
+              ) : (
+                <span className="text-rose-600 font-bold">{arrearsCount} Backlogs</span>
+              )}
             </div>
           </div>
         </div>
       </Card>
 
-      <Card>
-        {displayedMarks.length === 0 ? (
-          <div className="p-8 text-center">
-            <Award className="mx-auto size-10 text-muted-foreground/50 mb-2" />
-            <div className="font-semibold text-sm">No marks recorded for this semester</div>
-            <p className="text-xs text-muted-foreground mt-1">Select another semester tab to view scores.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">Subject</th>
-                  <th className="px-5 py-3">Semester</th>
-                  <th className="px-5 py-3">Assessment</th>
-                  <th className="px-5 py-3">Credits</th>
-                  <th className="px-5 py-3">Score</th>
-                  <th className="px-5 py-3">Grade</th>
-                  <th className="px-5 py-3 text-right">Result</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {displayedMarks.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="hover:bg-muted/30"
-                    data-testid={`row-mark-${m.id}`}
-                  >
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-foreground">{m.subject}</div>
-                      {m.subjectCode && (
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {m.subjectCode}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="rounded bg-accent/30 px-2 py-0.5 text-xs font-bold text-primary">
-                        Sem {m.semester || 1}
+      {/* CLASSIFIED MARKS SECTION: CURRENT AND HISTORY */}
+      {displayedMarks.length === 0 ? (
+        <Card className="p-10 text-center">
+          <Award className="mx-auto size-12 text-muted-foreground/40 mb-3" />
+          <h3 className="font-semibold text-base">No Marks Recorded for this Filter</h3>
+          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+            Select another semester tab above to inspect your continuous assessments or university results.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {/* SECTION 1: CURRENT SEMESTER (Shown when viewing "all", "current", or specific active sem) */}
+          {(selectedSemester === "all" || selectedSemester === "current" || selectedSemester === String(activeSem)) && (
+            <Card className="border-2 border-emerald-500/30 overflow-hidden shadow-sm">
+              <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-emerald-600 p-2 text-white shadow-sm">
+                    <Clock3 className="size-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                        Current Academic Term Evaluation
                       </span>
-                    </td>
-                    <td className="px-5 py-4 text-muted-foreground">
-                      {m.assessment}
-                    </td>
-                    <td className="px-5 py-4 text-xs font-semibold text-muted-foreground">
-                      {m.credits || 4}
-                    </td>
-                    <td className="px-5 py-4 font-semibold">
-                      {m.score}
-                      <span className="font-normal text-muted-foreground">
-                        {" "}
-                        / {m.maxScore}
+                      <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5 text-[10px] font-bold uppercase">
+                        Ongoing
                       </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="grid size-8 place-items-center rounded bg-accent/30 text-xs font-bold">
-                        {m.grade}
+                    </div>
+                    <h3 className="text-lg font-bold text-foreground">
+                      Semester {activeSem} Core Curriculum ({activeDept} Department · 5 Subjects)
+                    </h3>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground font-semibold">Continuous Assessment Average</div>
+                  <div className="text-xl font-extrabold text-emerald-600">
+                    {Math.round(
+                      (currentTermMarks.reduce((s, m) => s + (m.score || 0), 0) /
+                        Math.max(1, currentTermMarks.reduce((s, m) => s + (m.maxScore || 100), 0))) *
+                        100
+                    )}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-5 py-3">Course Code & Name</th>
+                      <th className="px-5 py-3">Assessment Type</th>
+                      <th className="px-5 py-3">Credits</th>
+                      <th className="px-5 py-3">Score & Performance</th>
+                      <th className="px-5 py-3">Grade</th>
+                      <th className="px-5 py-3 text-right">Term Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {currentTermMarks.map((m) => {
+                      const pct = Math.round(((m.score || 0) / (m.maxScore || 100)) * 100);
+                      return (
+                        <tr key={m.id} className="hover:bg-muted/30">
+                          <td className="px-5 py-4">
+                            <div className="font-semibold text-foreground">{m.subject}</div>
+                            {m.subjectCode && (
+                              <span className="inline-block mt-0.5 font-mono text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                                {m.subjectCode}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-muted-foreground font-medium">
+                            {m.assessment}
+                          </td>
+                          <td className="px-5 py-4 text-xs font-semibold text-muted-foreground">
+                            {m.credits || 4} Credits
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-foreground">
+                                {m.score}{" "}
+                                <span className="font-normal text-muted-foreground text-xs">
+                                  / {m.maxScore}
+                                </span>
+                              </span>
+                              <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-500 rounded-full"
+                                  style={{ width: `${Math.min(100, pct)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="grid size-8 place-items-center rounded-lg bg-emerald-500/15 text-emerald-700 font-extrabold text-xs">
+                              {m.grade}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                              <CheckCircle2 className="size-3.5" /> In Progress
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* SECTION 2: ACADEMIC HISTORY (Shown when viewing "all", "history", or specific past sem) */}
+          {(selectedSemester === "all" || selectedSemester === "history" || (Number(selectedSemester) < activeSem && selectedSemester !== "current")) && (
+            <Card className="border border-border overflow-hidden">
+              <div className="bg-muted/40 border-b border-border px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-indigo-600 p-2 text-white shadow-sm">
+                    <BookOpen className="size-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                        Academic History & University Transcripts
                       </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <Status tone={m.passed ? "positive" : "critical"}>
-                        {m.passed ? "Passed" : "Arrear"}
-                      </Status>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                      <span className="rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 px-2 py-0.5 text-[10px] font-bold uppercase">
+                        Verified
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-foreground">
+                      Completed Semesters 1 to {Math.max(1, activeSem - 1)} Official Records
+                    </h3>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground font-semibold">Total Cleared Courses</div>
+                  <div className="text-xl font-bold text-foreground">
+                    {historyMarks.filter((m) => m.passed !== false).length} Evaluations Passed
+                  </div>
+                </div>
+              </div>
+
+              {historySemesters.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  First semester student — no prior completed semesters in academic history.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="px-5 py-3">Course Code & Name</th>
+                        <th className="px-5 py-3">Completed Term</th>
+                        <th className="px-5 py-3">Assessment Category</th>
+                        <th className="px-5 py-3">Credits</th>
+                        <th className="px-5 py-3">University Score</th>
+                        <th className="px-5 py-3">Final Grade</th>
+                        <th className="px-5 py-3 text-right">Result Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {historyMarks
+                        .filter((m) => selectedSemester === "all" || selectedSemester === "history" || String(m.semester) === selectedSemester)
+                        .map((m) => {
+                          const pct = Math.round(((m.score || 0) / (m.maxScore || 100)) * 100);
+                          return (
+                            <tr key={m.id} className="hover:bg-muted/30">
+                              <td className="px-5 py-4">
+                                <div className="font-semibold text-foreground">{m.subject}</div>
+                                {m.subjectCode && (
+                                  <span className="inline-block mt-0.5 font-mono text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-semibold">
+                                    {m.subjectCode}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-5 py-4">
+                                <span className="rounded-md bg-indigo-500/10 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 font-mono">
+                                  Sem {m.semester}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-muted-foreground font-medium">
+                                {m.assessment}
+                              </td>
+                              <td className="px-5 py-4 text-xs font-semibold text-muted-foreground">
+                                {m.credits || 4} Credits
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-bold text-foreground">
+                                    {m.score}{" "}
+                                    <span className="font-normal text-muted-foreground text-xs">
+                                      / {m.maxScore}
+                                    </span>
+                                  </span>
+                                  <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full bg-indigo-600 rounded-full"
+                                      style={{ width: `${Math.min(100, pct)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-5 py-4">
+                                <span className="grid size-8 place-items-center rounded-lg bg-accent/40 text-foreground font-extrabold text-xs">
+                                  {m.grade}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-right">
+                                <Status tone={m.passed ? "positive" : "critical"}>
+                                  {m.passed ? "Passed" : "Arrear"}
+                                </Status>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -6926,6 +7636,14 @@ function Auth({ mode }) {
                 </button>
                 <button
                   type="button"
+                  onClick={() => quickLogin("teacher26cse")}
+                  className="px-2.5 py-1 rounded bg-primary/20 text-primary font-medium text-xs hover:bg-primary hover:text-primary-foreground transition-colors font-mono"
+                  title="Professor for CS601 (AI & Expert Systems) - 6th Semester"
+                >
+                  👨‍🏫 teacher26cse (Sem 6)
+                </button>
+                <button
+                  type="button"
                   onClick={() => quickLogin("teacher1ece")}
                   className="px-2.5 py-1 rounded bg-muted text-xs hover:bg-primary hover:text-primary-foreground transition-colors font-mono"
                 >
@@ -6961,14 +7679,22 @@ function Auth({ mode }) {
                   onClick={() => quickLogin("student1cse")}
                   className="px-2.5 py-1 rounded bg-primary/10 text-primary text-xs hover:bg-primary hover:text-primary-foreground transition-colors font-mono"
                 >
-                  🎓 student1cse
+                  🎓 student1cse (Sem 1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => quickLogin("student6cse")}
+                  className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition-colors font-mono shadow-sm"
+                  title="6th Semester CSE Student - 5 Core Subjects"
+                >
+                  🎓 student6cse (Sem 6)
                 </button>
                 <button
                   type="button"
                   onClick={() => quickLogin("student2cse")}
                   className="px-2.5 py-1 rounded bg-primary/10 text-primary text-xs hover:bg-primary hover:text-primary-foreground transition-colors font-mono"
                 >
-                  🎓 student2cse
+                  🎓 student2cse (Sem 2)
                 </button>
                 <button
                   type="button"

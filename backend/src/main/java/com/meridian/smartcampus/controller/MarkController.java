@@ -2,7 +2,9 @@ package com.meridian.smartcampus.controller;
 
 import com.meridian.smartcampus.model.Mark;
 import com.meridian.smartcampus.model.Student;
+import com.meridian.smartcampus.model.StudentDetails;
 import com.meridian.smartcampus.repository.MarkRepository;
+import com.meridian.smartcampus.repository.StudentDetailsRepository;
 import com.meridian.smartcampus.repository.StudentRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,10 +17,67 @@ public class MarkController {
 
     private final MarkRepository markRepository;
     private final StudentRepository studentRepository;
+    private final StudentDetailsRepository studentDetailsRepository;
 
-    public MarkController(MarkRepository markRepository, StudentRepository studentRepository) {
+    public MarkController(MarkRepository markRepository, StudentRepository studentRepository, StudentDetailsRepository studentDetailsRepository) {
         this.markRepository = markRepository;
         this.studentRepository = studentRepository;
+        this.studentDetailsRepository = studentDetailsRepository;
+    }
+
+    private Student resolveStudent(Long studentId, String username) {
+        if (studentId != null) {
+            return studentRepository.findById(studentId).orElse(null);
+        }
+        if (username != null && !username.trim().isEmpty()) {
+            String clean = username.trim().toLowerCase();
+            Optional<Student> st = studentRepository.findByEmail(clean + "@meridian.edu");
+            if (st.isPresent()) return st.get();
+            return studentRepository.findAll().stream()
+                    .filter(s -> s.getEmail() != null && s.getEmail().toLowerCase().contains(clean))
+                    .findFirst()
+                    .orElse(null);
+        }
+        return studentRepository.findById(1L).orElse(null);
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getMarksSummary(
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestHeader(value = "X-Username", required = false) String username,
+            @RequestParam(value = "studentId", required = false) Long studentId) {
+
+        Student student = resolveStudent(studentId, username);
+        if (student == null) {
+            return ResponseEntity.ok(Map.of("error", "Student not found", "semesters", Collections.emptyList()));
+        }
+
+        StudentDetails details = studentDetailsRepository.findByStudentId(student.getId()).orElse(null);
+        int currentSem = student.getSemester() != null ? student.getSemester() : 1;
+        int currentYear = student.getYear() != null ? student.getYear() : 1;
+        double cgpa = details != null && details.getCgpa() != null ? details.getCgpa() : 8.75;
+
+        List<Map<String, Object>> semesterList = new ArrayList<>();
+        if (details != null && details.getSemesterPercentages() != null) {
+            for (Map<String, Object> sp : details.getSemesterPercentages()) {
+                int semNum = ((Number) sp.getOrDefault("semester", 1)).intValue();
+                if (semNum <= currentSem) {
+                    Map<String, Object> item = new HashMap<>(sp);
+                    item.put("type", semNum == currentSem ? "current" : "history");
+                    semesterList.add(item);
+                }
+            }
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("studentId", student.getId());
+        resp.put("studentName", student.getName());
+        resp.put("department", student.getDepartment());
+        resp.put("currentSemester", currentSem);
+        resp.put("currentYear", currentYear);
+        resp.put("cumulativeCgpa", cgpa);
+        resp.put("semesters", semesterList);
+        return ResponseEntity.ok(resp);
     }
 
     @GetMapping
@@ -60,27 +119,22 @@ public class MarkController {
             return ResponseEntity.ok(resp);
         }
 
-        // Student marks lookup
-        Long resolvedStudentId = studentId;
-        if (resolvedStudentId == null && username != null && !username.trim().isEmpty()) {
-            String clean = username.trim().toLowerCase();
-            Optional<Student> st = studentRepository.findByEmail(clean + "@meridian.edu");
-            if (st.isEmpty()) {
-                st = studentRepository.findAll().stream()
-                        .filter(s -> s.getEmail() != null && s.getEmail().toLowerCase().contains(clean))
-                        .findFirst();
-            }
-            if (st.isPresent()) {
-                resolvedStudentId = st.get().getId();
-            }
+        // Student marks lookup restricted to current and past semesters
+        Student student = resolveStudent(studentId, username);
+        int maxAllowedSem = student != null && student.getSemester() != null ? student.getSemester() : 8;
+
+        if (semester != null && semester > maxAllowedSem) {
+            return ResponseEntity.ok(Collections.emptyList());
         }
 
         List<Mark> list;
-        if (resolvedStudentId != null) {
+        if (student != null) {
             if (semester != null) {
-                list = markRepository.findByStudentIdAndSemester(resolvedStudentId, semester);
+                list = markRepository.findByStudentIdAndSemester(student.getId(), semester);
             } else {
-                list = markRepository.findByStudentId(resolvedStudentId);
+                list = markRepository.findByStudentId(student.getId()).stream()
+                        .filter(m -> m.getSemester() != null && m.getSemester() <= maxAllowedSem)
+                        .toList();
             }
         } else {
             if (semester != null) {
@@ -88,14 +142,6 @@ public class MarkController {
                         .filter(m -> m.getSemester() != null && m.getSemester().equals(semester))
                         .toList();
             } else {
-                list = markRepository.findAll();
-            }
-        }
-
-        // If specific student has no marks seeded yet, fallback to student 1 or all marks
-        if (list.isEmpty()) {
-            list = markRepository.findByStudentId(1L);
-            if (list.isEmpty()) {
                 list = markRepository.findAll();
             }
         }

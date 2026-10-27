@@ -518,6 +518,7 @@ export function handleMockRequest(method, url) {
     return {
       handled: true,
       data: [
+        // Semester 1 (5 subjects, 5 dedicated professors)
         {
           id: 1,
           code: "CS101",
@@ -535,9 +536,9 @@ export function handleMockRequest(method, url) {
         {
           id: 2,
           code: "CS102",
-          name: "Data Structures & Algorithms",
+          name: "Engineering Mathematics I",
           department: "CSE",
-          semester: 2,
+          semester: 1,
           year: 1,
           credits: 4,
           faculty: "Dr. Barbara Liskov",
@@ -548,13 +549,13 @@ export function handleMockRequest(method, url) {
         },
         {
           id: 3,
-          code: "CS201",
-          name: "Object Oriented Programming & Java",
+          code: "CS103",
+          name: "Physics for Information Science",
           department: "CSE",
-          semester: 3,
-          year: 2,
-          credits: 4,
-          faculty: "Dr. James Gosling",
+          semester: 1,
+          year: 1,
+          credits: 3,
+          faculty: "Dr. Richard Feynman",
           facultyUsername: "teacher3cse",
           facultyEmail: "teacher3cse@meridian.edu",
           facultyPhone: "+1 (555) 011-2303",
@@ -562,20 +563,179 @@ export function handleMockRequest(method, url) {
         },
         {
           id: 4,
-          code: "CS202",
-          name: "Database Management Systems",
+          code: "CS104",
+          name: "Digital Principles & System Design",
           department: "CSE",
-          semester: 4,
-          year: 2,
+          semester: 1,
+          year: 1,
           credits: 4,
-          faculty: "Dr. Edgar Codd",
+          faculty: "Dr. Claude Shannon",
           facultyUsername: "teacher4cse",
           facultyEmail: "teacher4cse@meridian.edu",
           facultyPhone: "+1 (555) 011-2304",
           facultyDesignation: "Associate Professor",
         },
+        {
+          id: 5,
+          code: "CS105",
+          name: "Technical English Communication",
+          department: "CSE",
+          semester: 1,
+          year: 1,
+          credits: 3,
+          faculty: "Dr. Grace Hopper",
+          facultyUsername: "teacher5cse",
+          facultyEmail: "teacher5cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2305",
+          facultyDesignation: "Assistant Professor",
+        },
+        // Semester 6 (5 subjects, 5 dedicated professors)
+        {
+          id: 26,
+          code: "CS601",
+          name: "Artificial Intelligence & Expert Systems",
+          department: "CSE",
+          semester: 6,
+          year: 3,
+          credits: 4,
+          faculty: "Dr. Geoffrey Hinton",
+          facultyUsername: "teacher26cse",
+          facultyEmail: "teacher26cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2326",
+          facultyDesignation: "Professor (AI)",
+        },
+        {
+          id: 27,
+          code: "CS602",
+          name: "Compiler Design",
+          department: "CSE",
+          semester: 6,
+          year: 3,
+          credits: 4,
+          faculty: "Dr. Alfred Aho",
+          facultyUsername: "teacher27cse",
+          facultyEmail: "teacher27cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2327",
+          facultyDesignation: "Professor",
+        },
+        {
+          id: 28,
+          code: "CS603",
+          name: "Mobile Computing & Wireless Networks",
+          department: "CSE",
+          semester: 6,
+          year: 3,
+          credits: 3,
+          faculty: "Dr. Deborah Estrin",
+          facultyUsername: "teacher28cse",
+          facultyEmail: "teacher28cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2328",
+          facultyDesignation: "Associate Professor",
+        },
+        {
+          id: 29,
+          code: "CS604",
+          name: "Distributed Cloud Computing",
+          department: "CSE",
+          semester: 6,
+          year: 3,
+          credits: 3,
+          faculty: "Dr. Leslie Lamport",
+          facultyUsername: "teacher29cse",
+          facultyEmail: "teacher29cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2329",
+          facultyDesignation: "Professor",
+        },
+        {
+          id: 30,
+          code: "CS605",
+          name: "Big Data Analytics & Data Mining",
+          department: "CSE",
+          semester: 6,
+          year: 3,
+          credits: 3,
+          faculty: "Dr. Jeffrey Ullman",
+          facultyUsername: "teacher30cse",
+          facultyEmail: "teacher30cse@meridian.edu",
+          facultyPhone: "+1 (555) 011-2330",
+          facultyDesignation: "Professor",
+        },
       ],
     };
+  }
+
+  if (path.startsWith("/api/timetable")) {
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const sem6Subjects = [
+      { code: "CS601", name: "Artificial Intelligence & Expert Systems", faculty: "Dr. Geoffrey Hinton", user: "teacher26cse" },
+      { code: "CS602", name: "Compiler Design", faculty: "Dr. Alfred Aho", user: "teacher27cse" },
+      { code: "CS603", name: "Mobile Computing & Wireless Networks", faculty: "Dr. Deborah Estrin", user: "teacher28cse" },
+      { code: "CS604", name: "Distributed Cloud Computing", faculty: "Dr. Leslie Lamport", user: "teacher29cse" },
+      { code: "CS605", name: "Big Data Analytics & Data Mining", faculty: "Dr. Jeffrey Ullman", user: "teacher30cse" },
+    ];
+    const sem1Subjects = [
+      { code: "CS101", name: "Problem Solving & Python Programming", faculty: "Dr. Alan Turing", user: "teacher1cse" },
+      { code: "CS102", name: "Engineering Mathematics I", faculty: "Dr. Barbara Liskov", user: "teacher2cse" },
+      { code: "CS103", name: "Physics for Information Science", faculty: "Dr. Richard Feynman", user: "teacher3cse" },
+      { code: "CS104", name: "Digital Principles & System Design", faculty: "Dr. Claude Shannon", user: "teacher4cse" },
+      { code: "CS105", name: "Technical English Communication", faculty: "Dr. Grace Hopper", user: "teacher5cse" },
+    ];
+
+    if (path.includes("/teacher")) {
+      // Return slots for teacher26cse (CS601 only) or teacher1cse (CS101 only)
+      const isSem6Prof = url.includes("teacher26cse");
+      const sub = isSem6Prof ? sem6Subjects[0] : sem1Subjects[0];
+      const slots = [];
+      days.forEach((day, dIdx) => {
+        const period = ((dIdx % 5) + 1);
+        slots.push({
+          id: `tt-teach-${dIdx}`,
+          department: "CSE",
+          semester: isSem6Prof ? 6 : 1,
+          section: "A",
+          day,
+          period,
+          startTime: "09:00 AM",
+          endTime: "09:45 AM",
+          subjectCode: sub.code,
+          subjectName: sub.name,
+          facultyName: sub.faculty,
+          facultyUsername: sub.user,
+          room: "LH-101",
+          type: "lecture",
+        });
+      });
+      return { handled: true, data: slots };
+    }
+
+    const isSem6 = url.includes("semester=6");
+    const activeSubjects = isSem6 ? sem6Subjects : sem1Subjects;
+    const slots = [];
+    let idCounter = 1;
+
+    days.forEach((day, dIdx) => {
+      for (let period = 1; period <= 7; period++) {
+        const sub = activeSubjects[(dIdx * 7 + (period - 1)) % activeSubjects.length];
+        slots.push({
+          id: `tt-${idCounter++}`,
+          department: "CSE",
+          semester: isSem6 ? 6 : 1,
+          section: "A",
+          day,
+          period,
+          startTime: `${8 + period}:00 AM`,
+          endTime: `${8 + period}:45 AM`,
+          subjectCode: sub.code,
+          subjectName: sub.name,
+          facultyName: sub.faculty,
+          facultyUsername: sub.user,
+          room: `LH-${100 + (period % 3)}`,
+          type: period === 7 ? "practical" : "lecture",
+        });
+      }
+    });
+
+    return { handled: true, data: slots };
   }
 
   if (path === "/api/attendance") {
@@ -615,92 +775,97 @@ export function handleMockRequest(method, url) {
     };
   }
 
+  if (path === "/api/marks/summary") {
+    return {
+      handled: true,
+      data: {
+        studentId: 6,
+        studentName: "Alex Morgan",
+        department: "CSE",
+        currentSemester: 6,
+        currentYear: 3,
+        cumulativeCgpa: 8.74,
+        semesters: [
+          { semester: 1, year: 1, sgpa: 8.7, cgpa: 8.70, percentage: 86.8, creditsEarned: 22, type: "history", status: "Passed" },
+          { semester: 2, year: 1, sgpa: 9.1, cgpa: 8.90, percentage: 90.5, creditsEarned: 22, type: "history", status: "Passed" },
+          { semester: 3, year: 2, sgpa: 8.3, cgpa: 8.70, percentage: 82.7, creditsEarned: 22, type: "history", status: "Passed" },
+          { semester: 4, year: 2, sgpa: 8.6, cgpa: 8.68, percentage: 86.4, creditsEarned: 22, type: "history", status: "Passed" },
+          { semester: 5, year: 3, sgpa: 9.0, cgpa: 8.74, percentage: 90.1, creditsEarned: 22, type: "history", status: "Passed" },
+          { semester: 6, year: 3, sgpa: 8.8, cgpa: 8.75, percentage: 88.0, creditsEarned: 22, type: "current", status: "Ongoing" },
+        ],
+      },
+    };
+  }
+
   if (path === "/api/marks") {
     if (role === "faculty") {
       return {
         handled: true,
         data: {
-          subject: "Introduction to Programming (CS101)",
-          average: 84.5,
+          subject: "Artificial Intelligence & Expert Systems (CS601)",
+          average: 88.5,
           students: [
-            {
-              id: 1,
-              name: "John Doe",
-              score: 88,
-              maxScore: 100,
-              grade: "A",
-              passed: true,
-            },
-            {
-              id: 2,
-              name: "Emma Wilson",
-              score: 65,
-              maxScore: 100,
-              grade: "C",
-              passed: true,
-            },
-            {
-              id: 3,
-              name: "Lucas Brown",
-              score: 92,
-              maxScore: 100,
-              grade: "A",
-              passed: true,
-            },
-            {
-              id: 4,
-              name: "Mia Davis",
-              score: 85,
-              maxScore: 100,
-              grade: "B+",
-              passed: true,
-            },
-            {
-              id: 5,
-              name: "Ethan Miller",
-              score: 78,
-              maxScore: 100,
-              grade: "B",
-              passed: true,
-            },
-            {
-              id: 6,
-              name: "Sophia Smith",
-              score: 99,
-              maxScore: 100,
-              grade: "A+",
-              passed: true,
-            },
+            { id: 105, name: "Alex Morgan", score: 94, maxScore: 100, grade: "A+", passed: true },
+            { id: 1, name: "John Doe", score: 88, maxScore: 100, grade: "A", passed: true },
+            { id: 2, name: "Emma Wilson", score: 85, maxScore: 100, grade: "A", passed: true },
+            { id: 3, name: "Lucas Brown", score: 92, maxScore: 100, grade: "A+", passed: true },
+            { id: 4, name: "Mia Davis", score: 89, maxScore: 100, grade: "A", passed: true },
           ],
         },
       };
     }
+
+    const mockMarks = [
+      // Semester 6 (Current Active Semester)
+      { id: 1, studentId: 6, subjectCode: "CS601", subject: "Artificial Intelligence & Expert Systems (CS601)", semester: 6, credits: 4, assessment: "Continuous Assessment 1", score: 47, maxScore: 50, grade: "A+", passed: true },
+      { id: 2, studentId: 6, subjectCode: "CS601", subject: "Artificial Intelligence & Expert Systems (CS601)", semester: 6, credits: 4, assessment: "Midterm Examination", score: 94, maxScore: 100, grade: "A+", passed: true },
+      { id: 3, studentId: 6, subjectCode: "CS602", subject: "Cryptography & Network Security (CS602)", semester: 6, credits: 4, assessment: "Continuous Assessment 1", score: 46, maxScore: 50, grade: "A+", passed: true },
+      { id: 4, studentId: 6, subjectCode: "CS602", subject: "Cryptography & Network Security (CS602)", semester: 6, credits: 4, assessment: "Midterm Examination", score: 91, maxScore: 100, grade: "A+", passed: true },
+      { id: 5, studentId: 6, subjectCode: "CS603", subject: "Mobile Application Development (CS603)", semester: 6, credits: 4, assessment: "Continuous Assessment 1", score: 45, maxScore: 50, grade: "A+", passed: true },
+      { id: 6, studentId: 6, subjectCode: "CS603", subject: "Mobile Application Development (CS603)", semester: 6, credits: 4, assessment: "Midterm Examination", score: 89, maxScore: 100, grade: "A", passed: true },
+      { id: 7, studentId: 6, subjectCode: "CS604", subject: "Cloud Computing & Virtualization (CS604)", semester: 6, credits: 4, assessment: "Continuous Assessment 1", score: 48, maxScore: 50, grade: "O", passed: true },
+      { id: 8, studentId: 6, subjectCode: "CS604", subject: "Cloud Computing & Virtualization (CS604)", semester: 6, credits: 4, assessment: "Midterm Examination", score: 93, maxScore: 100, grade: "A+", passed: true },
+      { id: 9, studentId: 6, subjectCode: "CS605", subject: "AI & Security Implementation Lab (CS605)", semester: 6, credits: 2, assessment: "Lab Practical Exam & Viva", score: 96, maxScore: 100, grade: "O", passed: true },
+
+      // Semester 5 (History)
+      { id: 10, studentId: 6, subjectCode: "CS501", subject: "Theory of Computation & Automata (CS501)", semester: 5, credits: 4, assessment: "End Semester Examination", score: 90, maxScore: 100, grade: "O", passed: true },
+      { id: 11, studentId: 6, subjectCode: "CS502", subject: "Web Development Frameworks (CS502)", semester: 5, credits: 4, assessment: "End Semester Examination", score: 88, maxScore: 100, grade: "A", passed: true },
+      { id: 12, studentId: 6, subjectCode: "CS503", subject: "Computer Graphics & Multimedia (CS503)", semester: 5, credits: 4, assessment: "End Semester Examination", score: 92, maxScore: 100, grade: "A+", passed: true },
+      { id: 13, studentId: 6, subjectCode: "CS504", subject: "Embedded Systems & IoT (CS504)", semester: 5, credits: 4, assessment: "End Semester Examination", score: 89, maxScore: 100, grade: "A", passed: true },
+      { id: 14, studentId: 6, subjectCode: "CS505", subject: "Internet of Things & Web Lab (CS505)", semester: 5, credits: 2, assessment: "End Semester Examination", score: 95, maxScore: 100, grade: "O", passed: true },
+
+      // Semester 4 (History)
+      { id: 15, studentId: 6, subjectCode: "CS401", subject: "Design & Analysis of Algorithms (CS401)", semester: 4, credits: 4, assessment: "End Semester Examination", score: 87, maxScore: 100, grade: "A", passed: true },
+      { id: 16, studentId: 6, subjectCode: "CS402", subject: "Operating Systems Principles (CS402)", semester: 4, credits: 4, assessment: "End Semester Examination", score: 85, maxScore: 100, grade: "A", passed: true },
+      { id: 17, studentId: 6, subjectCode: "CS403", subject: "Software Engineering & Agile (CS403)", semester: 4, credits: 4, assessment: "End Semester Examination", score: 91, maxScore: 100, grade: "A+", passed: true },
+      { id: 18, studentId: 6, subjectCode: "CS404", subject: "Computer Networks & Protocols (CS404)", semester: 4, credits: 4, assessment: "End Semester Examination", score: 88, maxScore: 100, grade: "A", passed: true },
+      { id: 19, studentId: 6, subjectCode: "CS405", subject: "Operating Systems & Networks Lab (CS405)", semester: 4, credits: 2, assessment: "End Semester Examination", score: 96, maxScore: 100, grade: "O", passed: true },
+
+      // Semester 3 (History)
+      { id: 20, studentId: 6, subjectCode: "CS301", subject: "Discrete Mathematics & Graph Theory (CS301)", semester: 3, credits: 4, assessment: "End Semester Examination", score: 84, maxScore: 100, grade: "A", passed: true },
+      { id: 21, studentId: 6, subjectCode: "CS302", subject: "Digital Systems & Microprocessors (CS302)", semester: 3, credits: 4, assessment: "End Semester Examination", score: 82, maxScore: 100, grade: "A", passed: true },
+      { id: 22, studentId: 6, subjectCode: "CS303", subject: "Object Oriented Programming Java (CS303)", semester: 3, credits: 4, assessment: "End Semester Examination", score: 88, maxScore: 100, grade: "A", passed: true },
+      { id: 23, studentId: 6, subjectCode: "CS304", subject: "Database Management Systems (CS304)", semester: 3, credits: 4, assessment: "End Semester Examination", score: 85, maxScore: 100, grade: "A", passed: true },
+      { id: 24, studentId: 6, subjectCode: "CS305", subject: "Java & DBMS Laboratory (CS305)", semester: 3, credits: 2, assessment: "End Semester Examination", score: 94, maxScore: 100, grade: "O", passed: true },
+
+      // Semester 2 (History)
+      { id: 25, studentId: 6, subjectCode: "CS201", subject: "Data Structures & Modern C++ (CS201)", semester: 2, credits: 4, assessment: "End Semester Examination", score: 92, maxScore: 100, grade: "A+", passed: true },
+      { id: 26, studentId: 6, subjectCode: "CS202", subject: "Engineering Mathematics II (CS202)", semester: 2, credits: 4, assessment: "End Semester Examination", score: 89, maxScore: 100, grade: "A", passed: true },
+      { id: 27, studentId: 6, subjectCode: "CS203", subject: "Computer Architecture & Organization (CS203)", semester: 2, credits: 4, assessment: "End Semester Examination", score: 91, maxScore: 100, grade: "A+", passed: true },
+      { id: 28, studentId: 6, subjectCode: "CS204", subject: "Environmental Science & Engineering (CS204)", semester: 2, credits: 4, assessment: "End Semester Examination", score: 90, maxScore: 100, grade: "O", passed: true },
+      { id: 29, studentId: 6, subjectCode: "CS205", subject: "Data Structures & C++ Lab (CS205)", semester: 2, credits: 2, assessment: "End Semester Examination", score: 98, maxScore: 100, grade: "O", passed: true },
+
+      // Semester 1 (History)
+      { id: 30, studentId: 6, subjectCode: "CS101", subject: "Problem Solving & Python Programming (CS101)", semester: 1, credits: 4, assessment: "End Semester Examination", score: 92, maxScore: 100, grade: "A+", passed: true },
+      { id: 31, studentId: 6, subjectCode: "CS102", subject: "Engineering Mathematics I (CS102)", semester: 1, credits: 4, assessment: "End Semester Examination", score: 88, maxScore: 100, grade: "A", passed: true },
+      { id: 32, studentId: 6, subjectCode: "CS103", subject: "Physics for Information Science (CS103)", semester: 1, credits: 4, assessment: "End Semester Examination", score: 85, maxScore: 100, grade: "A", passed: true },
+      { id: 33, studentId: 6, subjectCode: "CS104", subject: "Digital Principles & Logic Design (CS104)", semester: 1, credits: 4, assessment: "End Semester Examination", score: 90, maxScore: 100, grade: "A+", passed: true },
+      { id: 34, studentId: 6, subjectCode: "CS105", subject: "Technical English Communication Lab (CS105)", semester: 1, credits: 2, assessment: "End Semester Examination", score: 96, maxScore: 100, grade: "O", passed: true },
+    ];
+
     return {
       handled: true,
-      data: [
-        {
-          id: 1,
-          studentId: 1,
-          subjectId: 1,
-          subject: "Introduction to Programming",
-          assessment: "Midterm",
-          score: 88,
-          maxScore: 100,
-          grade: "A",
-          passed: true,
-        },
-        {
-          id: 2,
-          studentId: 1,
-          subjectId: 2,
-          subject: "Data Structures",
-          assessment: "Midterm",
-          score: 65,
-          maxScore: 100,
-          grade: "C",
-          passed: true,
-        },
-      ],
+      data: mockMarks,
     };
   }
 
