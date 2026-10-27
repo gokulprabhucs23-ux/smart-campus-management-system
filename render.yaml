@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: smart-campus-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: PORT
+        value: 8080

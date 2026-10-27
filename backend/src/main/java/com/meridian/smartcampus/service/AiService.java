@@ -26,7 +26,7 @@ public class AiService {
 
     public Map<String, Object> processChat(String userRole, String username, String message, List<Map<String, String>> history, String requestedModel, String requestedProvider) {
         String cleanRole = userRole != null ? userRole.toLowerCase().trim() : "student";
-        Student activeStudent = campusContextService.findActiveStudent(username);
+        Student activeStudent = "student".equals(cleanRole) ? campusContextService.findActiveStudent(username) : null;
 
         // Update provider & model if user requested in payload
         if (requestedProvider != null && !requestedProvider.isEmpty()) {

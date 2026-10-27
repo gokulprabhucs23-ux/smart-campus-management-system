@@ -5,7 +5,11 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 // Module-level configuration
 // ---------------------------------------------------------------------------
 
-let _baseUrl = null;
+let _baseUrl =
+  typeof import.meta !== "undefined" &&
+  (import.meta.env?.VITE_API_URL || import.meta.env?.VITE_BACKEND_URL)
+    ? (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL).replace(/\/+$/, "")
+    : null;
 let _authTokenGetter = null;
 
 /**

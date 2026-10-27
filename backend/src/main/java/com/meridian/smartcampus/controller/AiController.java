@@ -64,7 +64,19 @@ public class AiController {
         String model = payload.containsKey("model") ? String.valueOf(payload.get("model")) : null;
         String provider = payload.containsKey("provider") ? String.valueOf(payload.get("provider")) : null;
 
-        Map<String, Object> response = aiService.processChat(userRole, username, message, history, model, provider);
+        String effectiveRole = userRole;
+        if (payload.containsKey("role") && payload.get("role") != null && !String.valueOf(payload.get("role")).isBlank()) {
+            effectiveRole = String.valueOf(payload.get("role"));
+        } else if (payload.containsKey("userRole") && payload.get("userRole") != null && !String.valueOf(payload.get("userRole")).isBlank()) {
+            effectiveRole = String.valueOf(payload.get("userRole"));
+        }
+
+        String effectiveUsername = username;
+        if (payload.containsKey("username") && payload.get("username") != null && !String.valueOf(payload.get("username")).isBlank()) {
+            effectiveUsername = String.valueOf(payload.get("username"));
+        }
+
+        Map<String, Object> response = aiService.processChat(effectiveRole, effectiveUsername, message, history, model, provider);
         return ResponseEntity.ok(response);
     }
 

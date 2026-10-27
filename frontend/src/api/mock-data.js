@@ -888,9 +888,127 @@ export function handleMockRequest(method, url) {
     };
   }
 
+  if (path === "/api/leaves" || path.startsWith("/api/leaves/")) {
+    const mockLeaves = [
+      {
+        id: 1,
+        applicantType: "student",
+        applicantUsername: "student1cse",
+        applicantName: "Alex Rivera",
+        department: "CSE",
+        studentId: "STU-2024-001",
+        leaveType: "Medical Leave",
+        startDate: "2026-10-02",
+        endDate: "2026-10-04",
+        totalDays: 3,
+        reason: "High viral fever and physician-advised rest. Medical prescription submitted to department.",
+        assignedApproverRole: "faculty",
+        assignedApproverUsername: "teacher1cse",
+        assignedApproverName: "Dr. Alan Turing",
+        status: "APPROVED",
+        reviewedBy: "Dr. Alan Turing",
+        reviewerRemarks: "Approved on medical grounds. Please catch up on CS101 lab exercises.",
+        reviewedAt: "2026-10-02 11:30",
+        createdAt: "2026-10-01 18:20",
+      },
+      {
+        id: 2,
+        applicantType: "student",
+        applicantUsername: "student1cse",
+        applicantName: "Alex Rivera",
+        department: "CSE",
+        studentId: "STU-2024-001",
+        leaveType: "Academic / On-Duty",
+        startDate: "2026-10-14",
+        endDate: "2026-10-16",
+        totalDays: 3,
+        reason: "Representing Meridian University at the National Inter-College Hackathon 2026.",
+        assignedApproverRole: "faculty",
+        assignedApproverUsername: "teacher1cse",
+        assignedApproverName: "Dr. Alan Turing",
+        status: "PENDING",
+        reviewedBy: null,
+        reviewerRemarks: null,
+        reviewedAt: null,
+        createdAt: "2026-10-08 09:15",
+      },
+      {
+        id: 3,
+        applicantType: "student",
+        applicantUsername: "student2cse",
+        applicantName: "Maya Patel",
+        department: "CSE",
+        studentId: "STU-2024-002",
+        leaveType: "Personal / Family",
+        startDate: "2026-10-18",
+        endDate: "2026-10-19",
+        totalDays: 2,
+        reason: "Attending elder sister's wedding ceremony in home town.",
+        assignedApproverRole: "faculty",
+        assignedApproverUsername: "teacher2cse",
+        assignedApproverName: "Dr. Barbara Liskov",
+        status: "PENDING",
+        reviewedBy: null,
+        reviewerRemarks: null,
+        reviewedAt: null,
+        createdAt: "2026-10-08 14:00",
+      },
+      {
+        id: 4,
+        applicantType: "faculty",
+        applicantUsername: "teacher1cse",
+        applicantName: "Dr. Alan Turing",
+        department: "CSE",
+        studentId: null,
+        leaveType: "Academic Duty / Conference",
+        startDate: "2026-10-21",
+        endDate: "2026-10-24",
+        totalDays: 4,
+        reason: "Keynote speaker at International Symposium on Machine Intelligence & Distributed Systems.",
+        assignedApproverRole: "admin",
+        assignedApproverUsername: "admin",
+        assignedApproverName: "Campus Administrator",
+        substituteTeacher: "Dr. Barbara Liskov will handle CS101 lectures and lab sessions.",
+        status: "PENDING",
+        reviewedBy: null,
+        reviewerRemarks: null,
+        reviewedAt: null,
+        createdAt: "2026-10-07 10:30",
+      },
+      {
+        id: 5,
+        applicantType: "faculty",
+        applicantUsername: "teacher2cse",
+        applicantName: "Dr. Barbara Liskov",
+        department: "CSE",
+        studentId: null,
+        leaveType: "Casual Leave",
+        startDate: "2026-09-28",
+        endDate: "2026-09-29",
+        totalDays: 2,
+        reason: "Family engagement and domestic commitments.",
+        assignedApproverRole: "admin",
+        assignedApproverUsername: "admin",
+        assignedApproverName: "Campus Administrator",
+        substituteTeacher: "Dr. James Gosling handled CS102 lectures.",
+        status: "APPROVED",
+        reviewedBy: "Campus Administrator",
+        reviewerRemarks: "Approved. Lecture coverage by Dr. Gosling noted.",
+        reviewedAt: "2026-09-26 16:45",
+        createdAt: "2026-09-25 11:00",
+      },
+    ];
+
+    if (method === "GET") {
+      return { handled: true, data: mockLeaves };
+    }
+    return { handled: true, data: { success: true, ...mockLeaves[0] } };
+  }
+
   // Fallback for all other /api routes
   if (method === "GET") {
     return { handled: true, data: [] };
   }
   return { handled: true, data: { success: true } };
 }
+

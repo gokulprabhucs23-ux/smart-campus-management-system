@@ -30,6 +30,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final NotificationRepository notificationRepository;
     private final FeeRepository feeRepository;
     private final TimetableRepository timetableRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
 
     public DatabaseSeeder(UserRepository userRepository,
                           DepartmentRepository departmentRepository,
@@ -46,7 +47,8 @@ public class DatabaseSeeder implements CommandLineRunner {
                           ComplaintRepository complaintRepository,
                           NotificationRepository notificationRepository,
                           FeeRepository feeRepository,
-                          TimetableRepository timetableRepository) {
+                          TimetableRepository timetableRepository,
+                          LeaveRequestRepository leaveRequestRepository) {
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.studentRepository = studentRepository;
@@ -63,6 +65,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         this.notificationRepository = notificationRepository;
         this.feeRepository = feeRepository;
         this.timetableRepository = timetableRepository;
+        this.leaveRequestRepository = leaveRequestRepository;
     }
 
     @Override
@@ -86,6 +89,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         notificationRepository.deleteAll();
         feeRepository.deleteAll();
         timetableRepository.deleteAll();
+        leaveRequestRepository.deleteAll();
 
         // 2. Administrator Users
         userRepository.save(new User(1L, "admin", "123", "Campus Administrator", "admin@meridian.edu", "admin", "Administration"));
@@ -517,7 +521,71 @@ public class DatabaseSeeder implements CommandLineRunner {
         // 14. Seed Monday to Saturday 7-period Timetables (45 min each)
         seedTimetables();
 
+        // 15. Seed Leave Requests for Students and Faculty
+        seedLeaveRequests();
+
         log.info("Database reset & seeding completed successfully with 5 departments, 40 subjects across 8 semesters, 40 teachers, 25 students, and Monday-Saturday 7-period timetables.");
+    }
+
+    private void seedLeaveRequests() {
+        log.info("Seeding realistic leave requests for students and teachers...");
+
+        // 1. Student 1 (Alex Rivera / student1cse) - Approved Leave
+        leaveRequestRepository.save(new LeaveRequest(
+                1L, "student", "student1cse", "Alex Rivera", "CSE", "STU-2024-001",
+                "Medical Leave", "2026-10-02", "2026-10-04", 3,
+                "High viral fever and physician-advised rest. Medical prescription submitted to department.",
+                "faculty", "teacher1cse", "Dr. Alan Turing",
+                null, "APPROVED", "Dr. Alan Turing",
+                "Approved on medical grounds. Please catch up on CS101 lab exercises.",
+                "2026-10-02 11:30", "2026-10-01 18:20"
+        ));
+
+        // 2. Student 1 (Alex Rivera / student1cse) - Pending Leave to Teacher
+        leaveRequestRepository.save(new LeaveRequest(
+                2L, "student", "student1cse", "Alex Rivera", "CSE", "STU-2024-001",
+                "Academic / On-Duty", "2026-10-14", "2026-10-16", 3,
+                "Representing Meridian University at the National Inter-College Hackathon 2026.",
+                "faculty", "teacher1cse", "Dr. Alan Turing",
+                null, "PENDING", null,
+                null,
+                null, "2026-10-08 09:15"
+        ));
+
+        // 3. Student 2 (Maya Patel / student2cse) - Pending Leave to Teacher
+        leaveRequestRepository.save(new LeaveRequest(
+                3L, "student", "student2cse", "Maya Patel", "CSE", "STU-2024-002",
+                "Personal / Family", "2026-10-18", "2026-10-19", 2,
+                "Attending elder sister's wedding ceremony in home town.",
+                "faculty", "teacher2cse", "Dr. Barbara Liskov",
+                null, "PENDING", null,
+                null,
+                null, "2026-10-08 14:00"
+        ));
+
+        // 4. Teacher 1 (Dr. Alan Turing / teacher1cse) - Pending Leave to Admin
+        leaveRequestRepository.save(new LeaveRequest(
+                4L, "faculty", "teacher1cse", "Dr. Alan Turing", "CSE", null,
+                "Academic Duty / Conference", "2026-10-21", "2026-10-24", 4,
+                "Keynote speaker at International Symposium on Machine Intelligence & Distributed Systems.",
+                "admin", "admin", "Campus Administrator",
+                "Dr. Barbara Liskov will handle CS101 lectures and lab sessions.",
+                "PENDING", null,
+                null,
+                null, "2026-10-07 10:30"
+        ));
+
+        // 5. Teacher 2 (Dr. Barbara Liskov / teacher2cse) - Approved Leave by Admin
+        leaveRequestRepository.save(new LeaveRequest(
+                5L, "faculty", "teacher2cse", "Dr. Barbara Liskov", "CSE", null,
+                "Casual Leave", "2026-09-28", "2026-09-29", 2,
+                "Family engagement and domestic commitments.",
+                "admin", "admin", "Campus Administrator",
+                "Dr. James Gosling handled CS102 lectures.",
+                "APPROVED", "Campus Administrator",
+                "Approved. Lecture coverage by Dr. Gosling noted.",
+                "2026-09-26 16:45", "2026-09-25 11:00"
+        ));
     }
 
     private void seedTimetables() {

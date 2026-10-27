@@ -47,6 +47,9 @@ import {
   RefreshCw,
   Search,
   Send,
+  CalendarCheck,
+  CalendarClock,
+  CheckSquare,
   Settings2,
   ShieldCheck,
   Sliders,
@@ -105,6 +108,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import "@/index.css";
 import { customFetch } from "@/api/custom-fetch";
+import { StudentLeaveRequests } from "@/components/leaves/StudentLeaveRequests";
+import { TeacherLeaveRequests } from "@/components/leaves/TeacherLeaveRequests";
+import { LeaveApprovals } from "@/components/leaves/LeaveApprovals";
 
 function StudentProfileModal({ student, onClose }) {
   const { data: details, isLoading } = useQuery({
@@ -259,7 +265,10 @@ const getNavGroups = (role) => {
           ? [["Subjects", "/subjects", BookOpen]]
           : []),
         ...(role === "admin"
-          ? [["Timetable", "/timetable", Clock3]]
+          ? [
+              ["Timetable", "/timetable", Clock3],
+              ["Leave Approvals", "/leave-approvals", CheckSquare],
+            ]
           : []),
       ],
     },
@@ -273,7 +282,23 @@ const getNavGroups = (role) => {
               ["Attendance", "/attendance", ClipboardCheck],
               ["Marks", "/marks", Award],
               ["Assignments", "/assignments", FileText],
-              ...(role === "student" ? [["Fees", "/fees", CreditCard]] : []),
+              ...(role === "student"
+                ? [
+                    ["Leave Requests", "/leave-requests", CalendarCheck],
+                    ["Fees", "/fees", CreditCard],
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
+    ...(role === "faculty"
+      ? [
+          {
+            label: "Leave & Approvals",
+            items: [
+              ["My Leave Requests", "/my-leave-requests", CalendarClock],
+              ["Student Leave Approvals", "/leave-approvals", CheckSquare],
             ],
           },
         ]
@@ -850,13 +875,21 @@ function StudentDashboard({ d, analytics }) {
         title={d?.greeting ?? "Good morning."}
         description="A clear starting point for everything happening across your campus."
         action={
-          <Link
-            href="/announcements"
-            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
-            data-testid="link-dashboard-announcements"
-          >
-            View announcements <ArrowRight className="ml-2 inline size-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/leave-requests"
+              className="rounded-lg border border-primary/20 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+            >
+              Apply for Leave
+            </Link>
+            <Link
+              href="/announcements"
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              data-testid="link-dashboard-announcements"
+            >
+              View announcements <ArrowRight className="ml-2 inline size-4" />
+            </Link>
+          </div>
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1179,12 +1212,20 @@ function AdminDashboard({ d, analytics }) {
         title={d?.greeting ?? "Good morning, Admin."}
         description="Campus operations at a glance."
         action={
-          <Link
-            href="/departments"
-            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
-          >
-            Manage Campus <ArrowRight className="ml-2 inline size-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/leave-approvals"
+              className="rounded-lg border border-primary/20 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+            >
+              Faculty Leave Approvals
+            </Link>
+            <Link
+              href="/departments"
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              Manage Campus <ArrowRight className="ml-2 inline size-4" />
+            </Link>
+          </div>
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1252,12 +1293,20 @@ function FacultyDashboard({ d, analytics }) {
         title={d?.greeting ?? "Good morning."}
         description="Your classes and department insights."
         action={
-          <Link
-            href="/students"
-            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
-          >
-            View Students <ArrowRight className="ml-2 inline size-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/leave-approvals"
+              className="rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+            >
+              Student Leave Approvals
+            </Link>
+            <Link
+              href="/students"
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              View Students <ArrowRight className="ml-2 inline size-4" />
+            </Link>
+          </div>
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -2209,22 +2258,14 @@ function Timetable() {
   // Student / Department timetable query
   const deptQuery = useQuery({
     queryKey: ["timetable", selectedDept, selectedSem],
-    queryFn: async () => {
-      const res = await fetch(`/api/timetable?department=${selectedDept}&semester=${selectedSem}`);
-      if (!res.ok) throw new Error("Failed to fetch department timetable");
-      return res.json();
-    },
+    queryFn: () => customFetch(`/api/timetable?department=${selectedDept}&semester=${selectedSem}`),
     enabled: viewMode === "department" || role === "admin" || role === "student",
   });
 
   // Teacher timetable query
   const teacherQuery = useQuery({
     queryKey: ["timetable-teacher", targetTeacher],
-    queryFn: async () => {
-      const res = await fetch(`/api/timetable/teacher?username=${targetTeacher}`);
-      if (!res.ok) throw new Error("Failed to fetch teacher timetable");
-      return res.json();
-    },
+    queryFn: () => customFetch(`/api/timetable/teacher?username=${targetTeacher}`),
     enabled: viewMode === "teacher" || role === "faculty",
   });
 
@@ -2264,12 +2305,10 @@ function Timetable() {
     if (!slotData) return;
     setActionLoading(true);
     try {
-      const res = await fetch("/api/timetable/slot", {
+      await customFetch("/api/timetable/slot", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(slotData),
       });
-      if (!res.ok) throw new Error("Failed to save slot");
       await qc.invalidateQueries({ queryKey: ["timetable"] });
       await qc.invalidateQueries({ queryKey: ["timetable-teacher"] });
       setToastMsg("Timetable slot saved successfully!");
@@ -2287,11 +2326,10 @@ function Timetable() {
     if (!confirm(`Are you sure you want to clear this ${slotData.day} Period ${slotData.period} slot?`)) return;
     setActionLoading(true);
     try {
-      const res = await fetch(
+      await customFetch(
         `/api/timetable/slot?department=${encodeURIComponent(slotData.department)}&semester=${slotData.semester}&day=${encodeURIComponent(slotData.day)}&period=${slotData.period}`,
         { method: "DELETE" }
       );
-      if (!res.ok) throw new Error("Failed to clear slot");
       await qc.invalidateQueries({ queryKey: ["timetable"] });
       await qc.invalidateQueries({ queryKey: ["timetable-teacher"] });
       setToastMsg("Timetable slot cleared!");
@@ -5128,18 +5166,44 @@ function Notifications() {
 }
 
 function AiAssistant() {
-  const { role: userRole } = useAuth();
+  const { role: userRole, user } = useAuth();
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      id: "init",
-      from: "assistant",
-      text: "👋 **Hello! I am your Meridian Smart Campus AI Assistant.**\n\nI am connected in real-time to your live university database. I can answer questions about your attendance records, course syllabus, exam marks, upcoming assignments, faculty directory, tuition fees, campus events, or administrative regulations.",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      model: "Grounded Campus Engine v2.5",
-      source: "campus_knowledge_engine"
-    },
-  ]);
+  const [messages, setMessages] = useState(() => {
+    if (userRole === "admin" || userRole === "staff") {
+      return [
+        {
+          id: "init",
+          from: "assistant",
+          text: "👋 **Welcome, Campus Administrator.**\n\nYou have full executive retrieval clearance across the university database. You can query department-wide CGPA statistics, inspect any student's complete academic record, track attendance compliance across campus, review fee collection ledgers, or manage service tickets.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          model: "Grounded Admin Intelligence v3.0",
+          source: "campus_knowledge_engine"
+        }
+      ];
+    } else if (userRole === "faculty") {
+      return [
+        {
+          id: "init",
+          from: "assistant",
+          text: "👋 **Welcome, Professor.**\n\nYou have instructor access to review class attendance, monitor at-risk students, inspect assignment submissions, dispatch deadline alerts, and check your teaching routine.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          model: "Grounded Faculty Intelligence v3.0",
+          source: "campus_knowledge_engine"
+        }
+      ];
+    } else {
+      return [
+        {
+          id: "init",
+          from: "assistant",
+          text: "👋 **Welcome, Student.**\n\nI am your personal campus intelligence advisor. I can answer questions about your CGPA, examination marks, attendance safe-skip buffer, pending assignments, fee dues, and timetable. *(Note: Other peers' records are protected by university privacy policies).* ",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          model: "Grounded Student Advisor v3.0",
+          source: "campus_knowledge_engine"
+        }
+      ];
+    }
+  });
   const [copiedId, setCopiedId] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [aiConfig, setAiConfig] = useState({
@@ -5161,9 +5225,9 @@ function AiAssistant() {
   const chatContainerRef = useRef(null);
 
   useEffect(() => {
-    fetch("/api/ai/config")
-      .then((r) => r.json())
+    customFetch("/api/ai/config")
       .then((data) => {
+        if (!data) return;
         setAiConfig(data);
         setConfigForm((prev) => ({
           ...prev,
@@ -5184,24 +5248,26 @@ function AiAssistant() {
     if (userRole === "faculty") {
       return [
         "Summarize attendance across my subjects",
+        "Show students with attendance below 75%",
+        "Broadcast assignment deadline reminder alert",
         "Show pending marks submissions",
-        "List active assignments and submission counts",
-        "Who is the Head of Department?"
+        "What is my teaching schedule for today?"
       ];
     } else if (userRole === "admin" || userRole === "staff") {
       return [
-        "Give me an overall campus system health summary",
-        "How many open complaints need attention?",
-        "Department faculty and student distribution",
-        "List upcoming campus symposiums and events"
+        "Executive overview of university CGPA across all departments",
+        "Which students have attendance below 75%?",
+        "Campus-wide fee dues and collection summary",
+        "What is John Doe's CGPA and academic record?",
+        "How many open complaints need attention?"
       ];
     } else {
       return [
         "How is my attendance and how many classes can I skip?",
+        "What is my latest CGPA and semester marks?",
+        "Simulate what score I need for a 9.0 CGPA",
         "What assignments are due this week?",
-        "Breakdown of my SGPA and examination marks",
-        "What is my outstanding tuition fee balance?",
-        "Who teaches Data Structures and what are the credits?"
+        "What is my outstanding tuition fee balance?"
       ];
     }
   };
@@ -5231,6 +5297,8 @@ function AiAssistant() {
         data: {
           message: trimmed,
           history: historyPayload,
+          role: userRole || "student",
+          username: user?.username || (userRole === "admin" ? "admin" : (userRole === "faculty" ? "teacher1cse" : "student1cse")),
           model: aiConfig.model,
           provider: aiConfig.provider
         }
@@ -5283,12 +5351,10 @@ function AiAssistant() {
       if (configForm.apiKey.trim()) {
         payload.apiKey = configForm.apiKey.trim();
       }
-      const res = await fetch("/api/ai/config", {
+      const data = await customFetch("/api/ai/config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
       setAiConfig((prev) => ({
         ...prev,
         provider: data.provider,
@@ -5305,9 +5371,8 @@ function AiAssistant() {
     setTestState({ testing: true, result: null });
     try {
       if (configForm.apiKey.trim()) {
-        await fetch("/api/ai/config", {
+        await customFetch("/api/ai/config", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: configForm.provider,
             model: configForm.model,
@@ -5315,9 +5380,8 @@ function AiAssistant() {
           })
         });
       }
-      const res = await fetch("/api/ai/test", { method: "POST" });
-      const data = await res.json();
-      setTestState({ testing: false, result: data.connected ? "success" : "failed" });
+      const data = await customFetch("/api/ai/test", { method: "POST" });
+      setTestState({ testing: false, result: data?.connected ? "success" : "failed" });
     } catch (_) {
       setTestState({ testing: false, result: "failed" });
     }
@@ -5533,15 +5597,33 @@ function AiAssistant() {
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {[
-              { label: "🎪 Register for AI Symposium", prompt: "Register me for the National AI Symposium" },
-              { label: "🚨 Bunk Calculator (Safe-Skips)", prompt: "How many classes can I skip without getting detained?" },
-              { label: "🎯 9.0 GPA Target Simulator", prompt: "Simulate what score I need for a 9.0 CGPA" },
-              { label: "📅 Today's Timetable", prompt: "What is my timetable for today?" },
-              { label: "🛠️ Raise Wi-Fi Complaint", prompt: "File a complaint: Wi-Fi disconnected in Lab 2" },
-              { label: "👨‍🏫 Who is my Mentor?", prompt: "Who is my assigned mentor?" },
-              { label: "💳 Tuition Fee Ledger", prompt: "Show my tuition fee ledger and dues" },
-            ].map((chip, idx) => (
+            {((userRole === "admin" || userRole === "staff")
+              ? [
+                  { label: "📊 University CGPA Report", prompt: "Executive overview of university CGPA across all departments" },
+                  { label: "⚠️ Low Attendance List (<75%)", prompt: "Which students have attendance below 75%?" },
+                  { label: "💳 Campus Tuition Ledger", prompt: "Campus-wide fee dues and collection summary" },
+                  { label: "🛠️ Open Service Tickets", prompt: "How many open complaints need attention?" },
+                  { label: "🎓 John Doe Dossier", prompt: "What is John Doe's CGPA and academic record?" },
+                  { label: "👨‍🏫 Faculty & HoDs", prompt: "Institutional faculty list and department heads" }
+                ]
+              : userRole === "faculty"
+              ? [
+                  { label: "📊 Class Attendance Matrix", prompt: "Summarize attendance across my subjects" },
+                  { label: "⚠️ Students Below 75%", prompt: "Show students with attendance below 75%" },
+                  { label: "📢 Broadcast Deadline Alert", prompt: "Broadcast assignment deadline reminder alert" },
+                  { label: "📝 Pending Marks Submissions", prompt: "Show pending marks submissions" },
+                  { label: "📅 Today's Teaching Schedule", prompt: "What is my teaching schedule for today?" }
+                ]
+              : [
+                  { label: "🚨 Attendance Safe-Skips", prompt: "How many classes can I skip without getting detained?" },
+                  { label: "🎓 My CGPA & Marks", prompt: "What is my latest CGPA and semester marks?" },
+                  { label: "🎯 9.0 GPA Simulator", prompt: "Simulate what score I need for a 9.0 CGPA" },
+                  { label: "📅 Today's Timetable", prompt: "What is my timetable for today?" },
+                  { label: "🎪 Register for AI Symposium", prompt: "Register me for the National AI Symposium" },
+                  { label: "🛠️ Raise Wi-Fi Ticket", prompt: "File a complaint: Wi-Fi disconnected in Lab 2" },
+                  { label: "💳 Tuition Fee Ledger", prompt: "Show my tuition fee ledger and dues" }
+                ]
+            ).map((chip, idx) => (
               <button
                 key={idx}
                 type="button"
@@ -5597,7 +5679,13 @@ function AiAssistant() {
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Ask anything about courses, attendance, grades, faculty, fees, policies…"
+              placeholder={
+                userRole === "admin" || userRole === "staff"
+                  ? "Search any student's CGPA, low attendance lists, department analytics, fee ledger, complaints…"
+                  : userRole === "faculty"
+                  ? "Query class attendance, taught subjects, student submissions, dispatch reminders, schedule…"
+                  : "Ask about your attendance, CGPA, exam marks, safe-skips, assignments, fees, timetable…"
+              }
               className="h-11 flex-1 rounded-xl border border-input bg-background px-4 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
               disabled={chat.isPending}
               data-testid="input-chat-message"
@@ -6679,17 +6767,10 @@ function Auth({ mode }) {
     setError("");
 
     try {
-      const resp = await fetch("/api/auth/login", {
+      const data = await customFetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: loginUser.trim(), password: loginPass.trim() }),
       });
-
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        throw new Error(data.error || "Login failed. Check your username and password.");
-      }
 
       // Save session credentials
       localStorage.setItem("campusToken", data.token);
@@ -6700,7 +6781,7 @@ function Auth({ mode }) {
       window.dispatchEvent(new Event("storage"));
       window.location.href = "/dashboard";
     } catch (err) {
-      setError(err.message || "Unable to connect to authentication server.");
+      setError(err?.data?.error || err.message || "Unable to connect to authentication server.");
     } finally {
       setLoading(false);
     }
@@ -6981,6 +7062,9 @@ function Router() {
                 <Route path="/attendance" component={Attendance} />
                 <Route path="/marks" component={Marks} />
                 <Route path="/assignments" component={Assignments} />
+                <Route path="/leave-requests" component={StudentLeaveRequests} />
+                <Route path="/my-leave-requests" component={TeacherLeaveRequests} />
+                <Route path="/leave-approvals" component={LeaveApprovals} />
                 <Route path="/announcements" component={Announcements} />
                 <Route path="/events" component={Events} />
                 <Route path="/complaints" component={Complaints} />

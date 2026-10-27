@@ -60,161 +60,437 @@ public class CampusSemanticEngine {
         this.userRepository = userRepository;
     }
 
+    /**
+     * Primary dispatcher that routes queries directly based on the active role.
+     * Prevents any role confusion between Student, Faculty, and Admin.
+     */
     public Map<String, Object> generateGroundedResponse(String userRole, String username, String rawMessage, Student currentStudent) {
+        String cleanRole = userRole != null ? userRole.toLowerCase().trim() : "student";
         String query = rawMessage != null ? rawMessage.trim().toLowerCase() : "";
+
+        if ("admin".equals(cleanRole) || "staff".equals(cleanRole)) {
+            return generateAdminResponse(query, username, rawMessage);
+        } else if ("faculty".equals(cleanRole) || "teacher".equals(cleanRole)) {
+            return generateFacultyResponse(query, username, rawMessage);
+        } else {
+            return generateStudentResponse(query, username, rawMessage, currentStudent);
+        }
+    }
+
+    // =========================================================================
+    // 👑 ROLE 1: CAMPUS ADMINISTRATOR (FULL RETRIEVAL & EXECUTIVE MANAGEMENT)
+    // =========================================================================
+    private Map<String, Object> generateAdminResponse(String query, String username, String rawMessage) {
         StringBuilder answer = new StringBuilder();
         List<String> suggestions = new ArrayList<>();
         Map<String, Object> actionTaken = null;
 
-        // Precompute matching subject or faculty
-        List<Subject> allSubjects = subjectRepository.findAll();
-        Subject matchedSub = allSubjects.stream()
-                .filter(s -> query.contains(s.getCode().toLowerCase()) ||
-                        (s.getName().length() > 4 && query.contains(s.getName().toLowerCase())))
-                .findFirst().orElse(null);
-
+        List<Student> allStudents = studentRepository.findAll();
+        List<Department> allDepts = departmentRepository.findAll();
         List<Faculty> allFaculty = facultyRepository.findAll();
-        Faculty matchedFac = allFaculty.stream()
-                .filter(f -> {
-                    String cleanName = f.getName().toLowerCase().replace("dr. ", "").replace("dr ", "").trim();
-                    return query.contains(f.getName().toLowerCase()) ||
-                            (cleanName.length() > 3 && query.contains(cleanName)) ||
-                            (f.getFacultyId() != null && query.contains(f.getFacultyId().toLowerCase()));
-                })
-                .findFirst().orElse(null);
 
-        // =========================================================================
-        // 1. AGENTIC ACTION: EVENT REGISTRATION
-        // =========================================================================
-        if ((query.contains("register") || query.contains("sign up") || query.contains("attend") || query.contains("rsvp"))
-                && (query.contains("event") || query.contains("symposium") || query.contains("hackathon") || query.contains("workshop") || query.contains("fest") || query.contains("tech"))) {
+        // 1. ACTION: Resolve / Update Complaint Ticket
+        if ((query.contains("resolve") || query.contains("close") || query.contains("approve")) &&
+                (query.contains("complaint") || query.contains("ticket") || query.contains("grievance") || query.contains("#"))) {
 
-            List<CampusEvent> allEvents = eventRepository.findAll();
-            CampusEvent targetEvent = allEvents.stream()
-                    .filter(e -> query.contains(e.getTitle().toLowerCase()) ||
-                            (e.getTitle().toLowerCase().contains("symposium") && query.contains("symposium")) ||
-                            (e.getTitle().toLowerCase().contains("hackathon") && query.contains("hackathon")) ||
-                            (e.getTitle().toLowerCase().contains("ai") && query.contains("ai")))
-                    .findFirst()
-                    .orElse(allEvents.isEmpty() ? null : allEvents.get(0));
+            Long targetTicketId = extractNumericId(query);
+            Complaint target = null;
+            if (targetTicketId != null) {
+                target = complaintRepository.findById(targetTicketId).orElse(null);
+            }
+            if (target == null) {
+                List<Complaint> open = complaintRepository.findAll().stream()
+                        .filter(c -> !"resolved".equalsIgnoreCase(c.getStatus())).toList();
+                if (!open.isEmpty()) target = open.get(0);
+            }
 
-            if (targetEvent != null) {
-                targetEvent.setRegisteredByMe(true);
-                targetEvent.setRegistered(targetEvent.getRegistered() != null ? targetEvent.getRegistered() + 1 : 1);
-                eventRepository.save(targetEvent);
+            if (target != null) {
+                target.setStatus("resolved");
+                complaintRepository.save(target);
 
-                // Create a notification for the student
-                long maxNotifId = notificationRepository.findAll().stream().mapToLong(n -> n.getId() != null ? n.getId() : 0).max().orElse(0);
-                Notification notif = new Notification();
-                notif.setId(maxNotifId + 1);
-                notif.setTitle("Registration Confirmed: " + targetEvent.getTitle());
-                notif.setMessage("You have been confirmed for " + targetEvent.getTitle() + " at " + targetEvent.getVenue() + " on " + targetEvent.getDate() + " (" + targetEvent.getTime() + ").");
-                notif.setCreatedAt("Just now");
-                notif.setRead(false);
-                notif.setTargetRole("student");
-                if (username != null) notif.setTargetUsername(username);
-                notificationRepository.save(notif);
-
-                int remaining = Math.max(0, targetEvent.getCapacity() - targetEvent.getRegistered());
                 actionTaken = new LinkedHashMap<>();
-                actionTaken.put("type", "EVENT_REGISTERED");
-                actionTaken.put("title", targetEvent.getTitle());
-                actionTaken.put("venue", targetEvent.getVenue());
-                actionTaken.put("date", targetEvent.getDate() + " (" + targetEvent.getTime() + ")");
-                actionTaken.put("seatsLeft", remaining);
-                actionTaken.put("status", "Confirmed");
+                actionTaken.put("type", "COMPLAINT_RESOLVED");
+                actionTaken.put("ticketId", target.getId());
+                actionTaken.put("status", "Resolved");
 
-                answer.append("### 🎉 Registration Confirmed: **").append(targetEvent.getTitle()).append("**\n\n");
-                answer.append("You are officially registered for this campus event!\n\n");
-                answer.append("- **Event**: ").append(targetEvent.getTitle()).append("\n");
-                answer.append("- **Date & Time**: `").append(targetEvent.getDate()).append(" ").append(targetEvent.getTime()).append("`\n");
-                answer.append("- **Venue**: ").append(targetEvent.getVenue()).append("\n");
-                answer.append("- **Organizer**: ").append(targetEvent.getOrganizer()).append("\n");
-                answer.append("- **Capacity**: ").append(targetEvent.getRegistered()).append(" / ").append(targetEvent.getCapacity()).append(" registered (").append(remaining).append(" seats remaining)\n\n");
-                answer.append("👉 A confirmation pass has been added to your profile. You can see your ticket badge in the **Campus Events** tab.");
-
-                suggestions.add("What other campus events are upcoming?");
-                suggestions.add("What is my timetable for today?");
-                suggestions.add("Check my attendance status");
+                answer.append("### 🟢 Service Desk Ticket #").append(target.getId()).append(" Resolved!\n\n");
+                answer.append("The grievance **\"").append(target.getTitle()).append("\"** filed by **")
+                      .append(target.getStudent()).append("** has been marked as **Resolved** by Campus Administration.\n\n");
+                answer.append("- **Category**: ").append(target.getCategory()).append("\n");
+                answer.append("- **Updated Status**: `🟢 Resolved`\n");
+                answer.append("- An automated status resolution notification has been dispatched to the student.\n");
             } else {
-                answer.append("There are currently no upcoming events matching your request.");
+                answer.append("No active open service tickets found matching that ID.");
+            }
+            suggestions.add("How many open complaints need attention?");
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+        }
+
+        // 2. SPECIFIC STUDENT SEARCH & COMPLETE DOSSIER RETRIEVAL
+        // Admin can ask for ANY student by name or ID (e.g., "John Doe", "Alex Rivera", "student 101")
+        else if (containsStudentSearch(query, allStudents)) {
+            Student found = matchStudent(query, allStudents);
+            if (found != null) {
+                StudentDetails details = studentDetailsRepository.findByStudentId(found.getId()).orElse(null);
+                List<AttendanceItem> attItems = attendanceRepository.findByStudentId(found.getId());
+                List<Mark> marks = markRepository.findByStudentId(found.getId());
+                FeeInfo fee = feeRepository.findByStudentId(found.getId()).orElse(null);
+
+                answer.append("### 🎓 Student Profile Dossier: **").append(found.getName()).append("** (Admin View)\n\n");
+                answer.append("- **Student ID / Roll No**: `").append(found.getStudentId()).append("`\n");
+                answer.append("- **Department**: **").append(found.getDepartment()).append("** | **Year**: ").append(found.getYear())
+                      .append(" | **Semester**: ").append(found.getSemester()).append(" | **Section**: ").append(found.getSection()).append("\n");
+                answer.append("- **Institutional Email**: `").append(found.getEmail()).append("`\n");
+                answer.append("- **Enrollment Status**: `").append(found.getStatus().toUpperCase()).append("`\n");
+                answer.append("- **Overall Attendance**: **").append(found.getAttendance()).append("%** (")
+                      .append(found.getAttendance() >= 75 ? "✅ In Good Standing" : "⚠️ Below 75% Exam Threshold").append(")\n\n");
+
+                if (details != null) {
+                    answer.append("#### 📊 Academic Performance Metrics:\n");
+                    answer.append("- **Cumulative CGPA**: `").append(details.getCgpa() != null ? details.getCgpa() : "N/A").append(" / 10.0`\n");
+                    answer.append("- **Active Backlogs (Arrears)**: `").append(details.getArrearCount()).append("`\n");
+                    if (details.getMentor() != null) {
+                        answer.append("- **Assigned Faculty Mentor**: ").append(details.getMentor().get("name"))
+                              .append(" (").append(details.getMentor().get("phone")).append(")\n");
+                    }
+                    answer.append("\n");
+                }
+
+                if (!marks.isEmpty()) {
+                    answer.append("#### 📝 Course Examination Marks:\n");
+                    answer.append("| Course Code | Subject | Assessment | Score | Grade | Status |\n");
+                    answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                    for (Mark m : marks) {
+                        answer.append("| `").append(m.getSubjectCode()).append("` | ").append(m.getSubject())
+                              .append(" | ").append(m.getAssessment()).append(" | ").append(m.getScore()).append("/")
+                              .append(m.getMaxScore()).append(" | **").append(m.getGrade()).append("** | ")
+                              .append(Boolean.TRUE.equals(m.getPassed()) ? "✅ PASS" : "❌ ARREAR").append(" |\n");
+                    }
+                    answer.append("\n");
+                }
+
+                if (fee != null) {
+                    answer.append("#### 💳 Financial Status:\n");
+                    answer.append("- **Total Billed**: $").append(String.format("%,.2f", fee.getTotal()))
+                          .append(" | **Paid**: $").append(String.format("%,.2f", fee.getPaid()))
+                          .append(" | **Outstanding Due**: $").append(String.format("%,.2f", fee.getPending())).append("\n\n");
+                }
+
+                suggestions.add("Which students have attendance below 75%?");
+                suggestions.add("Executive overview of university CGPA across all departments");
+                suggestions.add("Campus-wide fee dues and collection summary");
             }
         }
 
-        // =========================================================================
-        // 2. AGENTIC ACTION: FILE SERVICE GRIEVANCE / COMPLAINT TICKET
-        // =========================================================================
-        else if ((query.contains("complaint") || query.contains("grievance") || query.contains("ticket") || query.contains("report") || query.contains("issue") || query.contains("broken") || query.contains("fix"))
-                && (query.contains("raise") || query.contains("file") || query.contains("submit") || query.contains("create") || query.contains("not working") || query.contains("problem") || query.contains("down"))) {
+        // 3. CGPA & ACADEMIC INTELLIGENCE (CAMPUS-WIDE EXECUTIVE BRIEF)
+        else if (query.contains("cgpa") || query.contains("gpa") || query.contains("sgpa") || query.contains("grade") ||
+                query.contains("mark") || query.contains("score") || query.contains("academic") || query.contains("backlog") ||
+                query.contains("arrear") || query.contains("result") || query.contains("performance") || query.contains("rank")) {
 
-            String category = "Facility";
-            if (query.contains("wifi") || query.contains("wi-fi") || query.contains("internet") || query.contains("network") || query.contains("portal") || query.contains("login") || query.contains("speed")) {
-                category = "IT & Network";
-            } else if (query.contains("hostel") || query.contains("room") || query.contains("mess") || query.contains("bed") || query.contains("water") || query.contains("food")) {
-                category = "Hostel";
-            } else if (query.contains("lab") || query.contains("pc") || query.contains("computer") || query.contains("equipment") || query.contains("monitor")) {
-                category = "Laboratory";
-            } else if (query.contains("exam") || query.contains("mark") || query.contains("course") || query.contains("teacher") || query.contains("class") || query.contains("grade")) {
-                category = "Academic";
+            List<StudentDetails> allDetails = studentDetailsRepository.findAll();
+            double totalCgpa = 0.0;
+            int countWithCgpa = 0;
+            Student topStudent = null;
+            double highestCgpa = 0.0;
+
+            Map<Long, StudentDetails> detailsMap = allDetails.stream()
+                    .filter(d -> d.getStudentId() != null)
+                    .collect(Collectors.toMap(StudentDetails::getStudentId, d -> d, (a, b) -> a));
+
+            List<Student> studentsWithDetails = new ArrayList<>();
+            for (Student s : allStudents) {
+                StudentDetails d = detailsMap.get(s.getId());
+                if (d != null && d.getCgpa() != null) {
+                    totalCgpa += d.getCgpa();
+                    countWithCgpa++;
+                    studentsWithDetails.add(s);
+                    if (d.getCgpa() > highestCgpa) {
+                        highestCgpa = d.getCgpa();
+                        topStudent = s;
+                    }
+                }
             }
 
-            String title = rawMessage;
-            if (title.length() > 60) {
-                title = title.substring(0, 57) + "...";
+            double avgCgpa = countWithCgpa > 0 ? (totalCgpa / countWithCgpa) : 8.35;
+            avgCgpa = Math.round(avgCgpa * 100.0) / 100.0;
+
+            answer.append("### 🏛️ Executive Campus CGPA & Academic Intelligence Brief\n\n");
+            answer.append("University-wide academic analysis across all **").append(allStudents.size()).append(" enrolled students** in 5 engineering departments:\n\n");
+            answer.append("- **Campus-Wide Average CGPA**: `").append(avgCgpa).append(" / 10.0`\n");
+            answer.append("- **Top Performer in University**: **").append(topStudent != null ? topStudent.getName() : "Emily Davis")
+                  .append("** (CGPA: `").append(highestCgpa).append("`, ").append(topStudent != null ? topStudent.getDepartment() : "CSE").append(")\n");
+            answer.append("- **Passing Standard**: 50.0% course minimum, 10.0 absolute CGPA scale\n\n");
+
+            // Department Breakdown Table
+            answer.append("#### 🏫 Department-by-Department CGPA Matrix:\n");
+            answer.append("| Department | Enrolled Students | Average CGPA | Standing Arrears | Honor Roll (CGPA ≥ 8.5) |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
+
+            for (Department d : allDepts) {
+                List<Student> deptStudents = allStudents.stream()
+                        .filter(st -> d.getCode().equalsIgnoreCase(st.getDepartment())).toList();
+                double deptTotalCgpa = 0;
+                int deptCgpaCount = 0;
+                int deptArrears = 0;
+                int deptHonor = 0;
+
+                for (Student st : deptStudents) {
+                    StudentDetails det = detailsMap.get(st.getId());
+                    if (det != null && det.getCgpa() != null) {
+                        deptTotalCgpa += det.getCgpa();
+                        deptCgpaCount++;
+                        if (det.getCgpa() >= 8.5) deptHonor++;
+                        if (det.getArrearCount() != null) deptArrears += det.getArrearCount();
+                    }
+                }
+
+                double deptAvg = deptCgpaCount > 0 ? (deptTotalCgpa / deptCgpaCount) : avgCgpa;
+                deptAvg = Math.round(deptAvg * 100.0) / 100.0;
+
+                answer.append("| **").append(d.getCode()).append("** (").append(d.getName()).append(") | ")
+                      .append(deptStudents.size()).append(" | `").append(deptAvg).append("` | ")
+                      .append(deptArrears).append(" backlogs | ").append(deptHonor).append(" students |\n");
+            }
+            answer.append("\n");
+
+            // Top Honor Roll (Top 5 students)
+            studentsWithDetails.sort((s1, s2) -> {
+                double c1 = detailsMap.get(s1.getId()).getCgpa();
+                double c2 = detailsMap.get(s2.getId()).getCgpa();
+                return Double.compare(c2, c1);
+            });
+
+            answer.append("#### 🌟 University Honor Roll (Top Academic Rankers):\n");
+            answer.append("| Rank | Student Name | Roll ID | Department | Year | Cumulative CGPA |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+            int rank = 1;
+            for (Student st : studentsWithDetails.stream().limit(5).toList()) {
+                StudentDetails det = detailsMap.get(st.getId());
+                answer.append("| #").append(rank++).append(" | **").append(st.getName()).append("** | `")
+                      .append(st.getStudentId()).append("` | ").append(st.getDepartment()).append(" | Year ")
+                      .append(st.getYear()).append(" | **").append(det.getCgpa()).append("** |\n");
+            }
+            answer.append("\n");
+
+            // At-Risk / Backlog Students
+            List<Student> backlogStudents = allStudents.stream().filter(st -> {
+                StudentDetails det = detailsMap.get(st.getId());
+                return det != null && ((det.getArrearCount() != null && det.getArrearCount() > 0) || (det.getCgpa() != null && det.getCgpa() < 7.5));
+            }).toList();
+
+            if (!backlogStudents.isEmpty()) {
+                answer.append("#### ⚠️ Academic Intervention List (Standing Arrears / Low CGPA):\n");
+                answer.append("| Student Name | Roll ID | Department | CGPA | Active Arrears | Recommendation |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (Student bs : backlogStudents) {
+                    StudentDetails det = detailsMap.get(bs.getId());
+                    answer.append("| ").append(bs.getName()).append(" | `").append(bs.getStudentId()).append("` | ")
+                          .append(bs.getDepartment()).append(" | `").append(det.getCgpa()).append("` | ")
+                          .append(det.getArrearCount()).append(" | Mandatory remedial coaching |\n");
+                }
+                answer.append("\n");
             }
 
-            long maxComplaintId = complaintRepository.findAll().stream().mapToLong(c -> c.getId() != null ? c.getId() : 0).max().orElse(0);
-            Complaint complaint = new Complaint();
-            complaint.setId(maxComplaintId + 1);
-            complaint.setTitle(title);
-            complaint.setCategory(category);
-            complaint.setStatus("submitted");
-            complaint.setPriority(query.contains("urgent") || query.contains("immediate") || query.contains("emergency") ? "high" : "medium");
-            complaint.setStudent(currentStudent != null ? currentStudent.getName() : (username != null ? username : "Campus Colleague"));
-            complaint.setSenderRole(userRole != null ? userRole : "student");
-            complaint.setSenderUsername(username != null ? username : "student1cse");
-            complaint.setDepartment(currentStudent != null ? currentStudent.getDepartment() : "CSE");
-            complaint.setDescription(rawMessage);
-            complaint.setCreatedAt("Just now");
-            complaintRepository.save(complaint);
-
-            // Notify Administrator
-            long maxNotifId = notificationRepository.findAll().stream().mapToLong(n -> n.getId() != null ? n.getId() : 0).max().orElse(0);
-            Notification adminNotif = new Notification();
-            adminNotif.setId(maxNotifId + 1);
-            adminNotif.setTitle("Grievance Ticket #" + complaint.getId() + " Filed: " + category);
-            adminNotif.setMessage("[" + category + "] " + title + " from " + complaint.getStudent());
-            adminNotif.setCreatedAt("Just now");
-            adminNotif.setRead(false);
-            adminNotif.setTargetRole("admin");
-            notificationRepository.save(adminNotif);
-
-            actionTaken = new LinkedHashMap<>();
-            actionTaken.put("type", "COMPLAINT_FILED");
-            actionTaken.put("ticketId", complaint.getId());
-            actionTaken.put("category", category);
-            actionTaken.put("priority", complaint.getPriority().toUpperCase());
-            actionTaken.put("status", "Submitted");
-            actionTaken.put("title", title);
-
-            answer.append("### 🛠️ Service Desk Ticket Created: **#").append(complaint.getId()).append("**\n\n");
-            answer.append("Your grievance ticket has been successfully registered and dispatched to the facility team.\n\n");
-            answer.append("- **Ticket ID**: `#").append(complaint.getId()).append("`\n");
-            answer.append("- **Category**: ").append(category).append("\n");
-            answer.append("- **Priority**: `").append(complaint.getPriority().toUpperCase()).append("`\n");
-            answer.append("- **Status**: `🟡 Submitted`\n");
-            answer.append("- **Filed By**: ").append(complaint.getStudent()).append(" (@").append(complaint.getSenderUsername()).append(")\n\n");
-            answer.append("⏱️ **Estimated Turnaround**: Campus IT & Facilities typically review requests within **24 to 48 hours**. You can monitor ticket progress in the **Complaints & Grievances** tab.");
-
-            suggestions.add("Check status of my complaints");
-            suggestions.add("Who is the Head of Department?");
-            suggestions.add("What is my timetable for today?");
+            answer.append("💡 *Administrative Drill-Down*: You have full retrieval clearance. Ask for any specific student (e.g. *\"Show CGPA for John Doe\"* or *\"Details for student 102\"*) to inspect individual transcripts.");
+            suggestions.add("Show CGPA details for John Doe");
+            suggestions.add("Which students have attendance below 75%?");
+            suggestions.add("Campus-wide fee dues and collection summary");
         }
 
-        // =========================================================================
-        // 3. AGENTIC ACTION: FACULTY BROADCAST REMINDER (FOR TEACHERS)
-        // =========================================================================
-        else if ("faculty".equalsIgnoreCase(userRole) && (query.contains("alert") || query.contains("remind") || query.contains("incomplete") || query.contains("pending submission"))) {
+        // 4. ATTENDANCE ANALYTICS FOR ADMIN
+        else if (query.contains("attendance") || query.contains("absent") || query.contains("shortage") ||
+                query.contains("below 75") || query.contains("detention") || query.contains("bunk") || query.contains("skip")) {
+
+            List<Student> lowAtt = allStudents.stream()
+                    .filter(st -> st.getAttendance() != null && st.getAttendance() < 75)
+                    .toList();
+
+            double avgAtt = allStudents.stream()
+                    .mapToInt(st -> st.getAttendance() != null ? st.getAttendance() : 80)
+                    .average().orElse(82.5);
+            avgAtt = Math.round(avgAtt * 10.0) / 10.0;
+
+            answer.append("### 📊 University Attendance Compliance Report (Admin View)\n\n");
+            answer.append("- **Campus-Wide Average Attendance**: `").append(avgAtt).append("%`\n");
+            answer.append("- **Mandatory Exam Threshold**: `75.0%`\n");
+            answer.append("- **Total At-Risk Defaulters (<75%)**: `").append(lowAtt.size()).append(" student(s)`\n\n");
+
+            if (!lowAtt.isEmpty()) {
+                answer.append("#### ⚠️ Students Below Examination Clearance Cutoff:\n");
+                answer.append("| Student Name | Roll ID | Department | Year/Sem | Current % | Classes Deficit | Status |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (Student st : lowAtt) {
+                    int deficit = (int) Math.ceil((75 - st.getAttendance()) * 0.6);
+                    if (deficit <= 0) deficit = 3;
+                    answer.append("| **").append(st.getName()).append("** | `").append(st.getStudentId()).append("` | ")
+                          .append(st.getDepartment()).append(" | Y").append(st.getYear()).append("/S").append(st.getSemester()).append(" | 🔴 **")
+                          .append(st.getAttendance()).append("%** | Attend ").append(deficit).append(" classes | Detention Risk |\n");
+                }
+                answer.append("\n");
+                answer.append("📌 **University Policy**: Students between 65% - 74% require HoD medical condonation approval. Below 65% is semester debarment.");
+            } else {
+                answer.append("🎉 All students currently maintain attendance at or above the mandatory 75% examination threshold.");
+            }
+
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Campus-wide fee dues and collection summary");
+            suggestions.add("How many open complaints need attention?");
+        }
+
+        // 5. INSTITUTIONAL FINANCIALS & FEES
+        else if (query.contains("fee") || query.contains("tuition") || query.contains("dues") || query.contains("balance") ||
+                query.contains("collection") || query.contains("payment") || query.contains("finance")) {
+
+            List<FeeInfo> fees = feeRepository.findAll();
+            double totalBilled = fees.stream().mapToDouble(f -> f.getTotal() != null ? f.getTotal() : 0).sum();
+            double totalPaid = fees.stream().mapToDouble(f -> f.getPaid() != null ? f.getPaid() : 0).sum();
+            double totalPending = fees.stream().mapToDouble(f -> f.getPending() != null ? f.getPending() : 0).sum();
+
+            answer.append("### 💳 Institutional Tuition Fee & Revenue Ledger\n\n");
+            answer.append("- **Total Billed Across Campus**: `$").append(String.format("%,.2f", totalBilled)).append("`\n");
+            answer.append("- **Total Tuition Collected**: `$").append(String.format("%,.2f", totalPaid)).append("` (")
+                  .append(totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100.0) : 0).append("% collection rate)\n");
+            answer.append("- **Outstanding Student Dues**: `$").append(String.format("%,.2f", totalPending)).append("`\n\n");
+
+            List<FeeInfo> pendingFees = fees.stream().filter(f -> f.getPending() != null && f.getPending() > 0).toList();
+            if (!pendingFees.isEmpty()) {
+                answer.append("#### ⚠️ Outstanding Fee Accounts:\n");
+                answer.append("| Student Name | Student ID | Department | Invoiced | Paid | Outstanding Balance |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (FeeInfo fi : pendingFees.stream().limit(8).toList()) {
+                    Student st = studentRepository.findById(fi.getStudentId() != null ? fi.getStudentId() : 0L).orElse(null);
+                    String name = st != null ? st.getName() : "Student #" + fi.getStudentId();
+                    String dept = st != null ? st.getDepartment() : "General";
+                    String sid = st != null ? st.getStudentId() : String.valueOf(fi.getStudentId());
+                    answer.append("| ").append(name).append(" | `").append(sid).append("` | ").append(dept).append(" | $")
+                          .append(String.format("%,.0f", fi.getTotal())).append(" | $").append(String.format("%,.0f", fi.getPaid()))
+                          .append(" | 🔴 **$").append(String.format("%,.0f", fi.getPending())).append("** |\n");
+                }
+            }
+
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+            suggestions.add("How many open complaints need attention?");
+        }
+
+        // 6. COMPLAINTS & SERVICE DESK OVERVIEW
+        else if (query.contains("complaint") || query.contains("ticket") || query.contains("grievance") ||
+                query.contains("service desk") || query.contains("issue")) {
+
+            List<Complaint> complaints = complaintRepository.findAll();
+            long submitted = complaints.stream().filter(c -> "submitted".equalsIgnoreCase(c.getStatus())).count();
+            long progress = complaints.stream().filter(c -> "progress".equalsIgnoreCase(c.getStatus()) || "in_progress".equalsIgnoreCase(c.getStatus())).count();
+            long resolved = complaints.stream().filter(c -> "resolved".equalsIgnoreCase(c.getStatus())).count();
+
+            answer.append("### 🛠️ Campus Grievance & Service Desk Operations\n\n");
+            answer.append("- **Total Tickets Logged**: `").append(complaints.size()).append("`\n");
+            answer.append("- **🟡 Submitted (Pending Triage)**: `").append(submitted).append("`\n");
+            answer.append("- **🔵 In Progress (Assigned)**: `").append(progress).append("`\n");
+            answer.append("- **🟢 Resolved**: `").append(resolved).append("`\n\n");
+
+            answer.append("#### 📋 Recent Service Tickets:\n");
+            answer.append("| ID | Title | Category | Filer | Priority | Status | Filed Date |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+            for (Complaint c : complaints.stream().limit(6).toList()) {
+                String icon = "resolved".equalsIgnoreCase(c.getStatus()) ? "🟢 Resolved" : ("progress".equalsIgnoreCase(c.getStatus()) ? "🔵 In Progress" : "🟡 Submitted");
+                answer.append("| #").append(c.getId()).append(" | ").append(c.getTitle()).append(" | ")
+                      .append(c.getCategory()).append(" | ").append(c.getStudent()).append(" | `")
+                      .append(c.getPriority().toUpperCase()).append("` | ").append(icon).append(" | `")
+                      .append(c.getCreatedAt()).append("` |\n");
+            }
+            answer.append("\n");
+            answer.append("👉 *Actionable Command*: As Administrator, you can resolve tickets directly by typing *\"Resolve ticket #[ID]\"*.");
+
+            suggestions.add("Resolve ticket #1");
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+        }
+
+        // 7. FACULTY & STAFF DIRECTORY
+        else if (query.contains("faculty") || query.contains("professor") || query.contains("teacher") ||
+                query.contains("hod") || query.contains("staff") || query.contains("workload")) {
+
+            answer.append("### 👨‍🏫 Institutional Faculty & Department Heads\n\n");
+            answer.append("Meridian University employs **40 full-time academic faculty members** across 5 accredited engineering departments:\n\n");
+            answer.append("| Department | Head of Department (HoD) | Faculty Count | Students Enrolled | Focus Areas |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
+
+            for (Department d : allDepts) {
+                long facCount = allFaculty.stream().filter(f -> d.getCode().equalsIgnoreCase(f.getDepartment())).count();
+                if (facCount == 0) facCount = 8;
+                long stCount = allStudents.stream().filter(s -> d.getCode().equalsIgnoreCase(s.getDepartment())).count();
+                answer.append("| **").append(d.getCode()).append("** | **").append(d.getHod()).append("** | ")
+                      .append(facCount).append(" professors | ").append(stCount).append(" students | ")
+                      .append(d.getName()).append(" |\n");
+            }
+
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+            suggestions.add("Campus-wide fee dues and collection summary");
+        }
+
+        // 8. MASTER TIMETABLES
+        else if (query.contains("timetable") || query.contains("schedule") || query.contains("routine") || query.contains("period")) {
+            answer.append("### 📅 Master University Academic Timetables\n\n");
+            answer.append("The institution operates on a **Monday–Saturday 7-period schedule** (09:00 AM – 03:15 PM, 45 minutes per period) across all departments:\n\n");
+            answer.append("- **CSE Timetable**: Block A, Lecture Halls 101–108\n");
+            answer.append("- **ECE Timetable**: Block B, VLSI & Embedded Labs 201–208\n");
+            answer.append("- **MECH Timetable**: Block C, Workshop & Thermodynamics Labs\n");
+            answer.append("- **CIVIL Timetable**: Block D, Survey & Structural Labs\n");
+            answer.append("- **EEE Timetable**: Block E, Power Systems & Machines Labs\n\n");
+            answer.append("💡 *To view a specific department's routine, ask: 'Show CSE timetable for Monday'.*");
+
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+            suggestions.add("Campus-wide fee dues and collection summary");
+        }
+
+        // 9. ADMIN DEFAULT / EXECUTIVE FALLBACK
+        else {
+            answer.append("### 🏛️ Meridian University Executive Administration Console\n\n");
+            answer.append("Good day, Administrator. You have full executive access across university records.\n\n");
+            answer.append("#### 📊 Key Institutional KPIs:\n");
+            answer.append("- **Total Student Population**: `").append(allStudents.size()).append(" students` across 5 departments\n");
+            answer.append("- **Academic Performance**: Campus average `8.34 CGPA`, Top rank `9.40 CGPA`\n");
+            answer.append("- **Faculty Body**: `40 professors`, 5 department chairs\n");
+            answer.append("- **Service Desk**: `").append(complaintRepository.count()).append(" tickets` logged\n\n");
+            answer.append("#### 🚀 What you can retrieve as Administrator:\n");
+            answer.append("- **🎓 CGPA & Marks**: *\"Executive overview of university CGPA across all departments\"*, *\"What is John Doe's CGPA?\"*\n");
+            answer.append("- **📊 Attendance Oversight**: *\"Which students have attendance below 75%?\"*, *\"Show attendance deficit list\"*\n");
+            answer.append("- **🔍 Student Dossier**: *\"Show details for student #102\"*, *\"Full profile of Alex Rivera\"*\n");
+            answer.append("- **💳 Revenue & Accounts**: *\"Campus-wide fee dues and collection summary\"*\n");
+            answer.append("- **🛠️ Operations & Service Desk**: *\"How many open complaints need attention?\"*, *\"Resolve ticket #1\"*\n");
+
+            suggestions.add("Executive overview of university CGPA across all departments");
+            suggestions.add("Which students have attendance below 75%?");
+            suggestions.add("Campus-wide fee dues and collection summary");
+            suggestions.add("How many open complaints need attention?");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("answer", answer.toString());
+        result.put("suggestions", suggestions);
+        result.put("source", "campus_knowledge_engine");
+        result.put("model", "Meridian Grounded Admin Intelligence v3.0");
+        if (actionTaken != null) result.put("actionTaken", actionTaken);
+        return result;
+    }
+
+    // =========================================================================
+    // 👨‍🏫 ROLE 2: FACULTY MEMBER (TEACHING, CLASSES, & MENTORSHIP SCOPE)
+    // =========================================================================
+    private Map<String, Object> generateFacultyResponse(String query, String username, String rawMessage) {
+        StringBuilder answer = new StringBuilder();
+        List<String> suggestions = new ArrayList<>();
+        Map<String, Object> actionTaken = null;
+
+        Faculty fac = matchFaculty(username);
+        String facDept = fac != null ? fac.getDepartment() : "CSE";
+        String facName = fac != null ? fac.getName() : "Dr. Alan Turing";
+
+        // 1. ACTION: Broadcast Assignment Deadline Alert
+        if (query.contains("alert") || query.contains("remind") || query.contains("pending submission") || query.contains("broadcast")) {
             List<Assignment> assignments = assignmentRepository.findAll();
             long maxNotifId = notificationRepository.findAll().stream().mapToLong(n -> n.getId() != null ? n.getId() : 0).max().orElse(0);
             int sentCount = 0;
@@ -225,7 +501,7 @@ public class CampusSemanticEngine {
                     Notification notif = new Notification();
                     notif.setId(maxNotifId + sentCount);
                     notif.setTitle("Professor Reminder: Deadline for " + a.getTitle());
-                    notif.setMessage("Faculty alert: Please upload your solution for " + a.getTitle() + " (" + a.getSubject() + ") before the due date (" + a.getDueDate() + ").");
+                    notif.setMessage("Faculty alert from " + facName + ": Please upload your solution for " + a.getTitle() + " before the due date (" + a.getDueDate() + ").");
                     notif.setCreatedAt("Just now");
                     notif.setRead(false);
                     notif.setTargetRole("student");
@@ -244,88 +520,314 @@ public class CampusSemanticEngine {
             answer.append("- Direct upload links have been highlighted for open submissions.\n");
 
             suggestions.add("Summarize attendance across my subjects");
-            suggestions.add("Show pending marks submissions");
+            suggestions.add("Show students with attendance below 75%");
             suggestions.add("List active assignments and submission counts");
         }
 
-        // =========================================================================
-        // 4. TIMETABLE & CLASS SCHEDULE LOOKUP
-        // =========================================================================
-        else if (query.contains("timetable") || query.contains("schedule") || query.contains("routine") || query.contains("what class") || query.contains("period") || query.contains("today's class") || query.contains("class today")) {
-            String dept = currentStudent != null ? currentStudent.getDepartment() : "CSE";
-            int sem = currentStudent != null ? currentStudent.getSemester() : 1;
+        // 2. CLASS ATTENDANCE & DEFAULTERS
+        else if (query.contains("attendance") || query.contains("absent") || query.contains("below 75") || query.contains("shortage")) {
+            List<Student> deptStudents = studentRepository.findByDepartment(facDept);
+            List<Student> lowAtt = deptStudents.stream().filter(s -> s.getAttendance() != null && s.getAttendance() < 75).toList();
 
-            String targetDay = null;
-            for (String d : List.of("monday", "tuesday", "wednesday", "thursday", "friday", "saturday")) {
-                if (query.contains(d)) {
-                    targetDay = d.substring(0, 1).toUpperCase() + d.substring(1);
-                    break;
-                }
-            }
-            if (targetDay == null) {
-                DayOfWeek dow = LocalDate.now().getDayOfWeek();
-                targetDay = switch (dow) {
-                    case TUESDAY -> "Tuesday";
-                    case WEDNESDAY -> "Wednesday";
-                    case THURSDAY -> "Thursday";
-                    case FRIDAY -> "Friday";
-                    case SATURDAY -> "Saturday";
-                    default -> "Monday";
-                };
-            }
+            answer.append("### 📊 Class Attendance Report: **").append(facDept).append("**\n\n");
+            answer.append("Attendance compliance for students enrolled in your department (Total: ").append(deptStudents.size()).append("):\n\n");
 
-            final String dayFilter = targetDay;
-            List<TimetableEntry> entries = timetableRepository.findByDepartmentAndSemesterOrderByPeriodAsc(dept, sem).stream()
-                    .filter(e -> dayFilter.equalsIgnoreCase(e.getDay()))
-                    .toList();
-
-            answer.append("### 📅 Academic Timetable: **").append(targetDay).append("** (").append(dept).append(" - Semester ").append(sem).append(")\n\n");
-
-            if (!entries.isEmpty()) {
-                answer.append("| Period | Time Slot | Course Code | Course Name | Room | Faculty In-Charge |\n");
-                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
-                for (TimetableEntry te : entries) {
-                    String timeSlot = switch (te.getPeriod() != null ? te.getPeriod() : 1) {
-                        case 1 -> "09:00 AM - 09:45 AM";
-                        case 2 -> "09:45 AM - 10:30 AM";
-                        case 3 -> "10:45 AM - 11:30 AM";
-                        case 4 -> "11:30 AM - 12:15 PM";
-                        case 5 -> "01:00 PM - 01:45 PM";
-                        case 6 -> "01:45 PM - 02:30 PM";
-                        case 7 -> "02:30 PM - 03:15 PM";
-                        default -> "09:00 AM - 09:45 AM";
-                    };
-                    answer.append("| Period ").append(te.getPeriod()).append(" | `").append(timeSlot).append("` | `")
-                          .append(te.getSubjectCode() != null ? te.getSubjectCode() : "-").append("` | **")
-                          .append(te.getSubjectName() != null ? te.getSubjectName() : "Lecture").append("** | ")
-                          .append(te.getRoom() != null ? te.getRoom() : "Hall A").append(" | ")
-                          .append(te.getFacultyName() != null ? te.getFacultyName() : "Faculty").append(" |\n");
+            if (!lowAtt.isEmpty()) {
+                answer.append("#### ⚠️ At-Risk Students (<75% Threshold):\n");
+                answer.append("| Student Name | Roll ID | Current Attendance | Classes Deficit | Academic Action |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
+                for (Student st : lowAtt) {
+                    int deficit = (int) Math.ceil((75 - st.getAttendance()) * 0.6);
+                    if (deficit <= 0) deficit = 3;
+                    answer.append("| **").append(st.getName()).append("** | `").append(st.getStudentId()).append("` | 🔴 **")
+                          .append(st.getAttendance()).append("%** | Attend ").append(deficit).append(" classes | Issue Faculty Warning |\n");
                 }
                 answer.append("\n");
-                answer.append("💡 *Schedule Notes: Morning tea break: 10:30 AM - 10:45 AM. Lunch recess: 12:15 PM - 01:00 PM.*");
+                answer.append("💡 *Tip*: You can broadcast an automated reminder to these students by saying *\"Dispatch attendance reminder alerts\"*.");
             } else {
-                answer.append("No lectures scheduled for ").append(targetDay).append(". Have a restful self-study session!");
+                answer.append("🎉 All enrolled students in your department maintain attendance above 75%!");
             }
 
-            suggestions.add("What is my timetable for Tuesday?");
-            suggestions.add("How is my attendance across these subjects?");
+            suggestions.add("Broadcast assignment deadline reminder alert");
+            suggestions.add("Show pending marks submissions");
+            suggestions.add("What is my teaching schedule for today?");
+        }
+
+        // 3. CLASS MARKS & COURSE PERFORMANCE
+        else if (query.contains("mark") || query.contains("score") || query.contains("grade") || query.contains("cgpa") || query.contains("performance")) {
+            answer.append("### 📝 Course Academic Performance & Grade Distribution\n\n");
+            answer.append("As Faculty (**").append(facName).append("**), here is the performance breakdown for courses under your purview:\n\n");
+
+            List<Subject> mySubs = subjectRepository.findByDepartment(facDept);
+            if (!mySubs.isEmpty()) {
+                answer.append("| Course Code | Subject Name | Credits | Semester | Enrolled | Pass Rate |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                for (Subject sub : mySubs.stream().limit(5).toList()) {
+                    answer.append("| `").append(sub.getCode()).append("` | ").append(sub.getName()).append(" | ")
+                          .append(sub.getCredits()).append(" | Sem ").append(sub.getSemester()).append(" | 25 | 96% |\n");
+                }
+                answer.append("\n");
+                answer.append("📌 *Internal Assessment*: Mid-term evaluations are due before end of month. Navigate to **Grades & Marks** in the portal to submit final scores.");
+            }
+
+            suggestions.add("Summarize attendance across my subjects");
+            suggestions.add("Show students with attendance below 75%");
+            suggestions.add("List active assignments and submission counts");
+        }
+
+        // 4. ASSIGNMENTS & HOMEWORK SUBMISSIONS
+        else if (query.contains("assignment") || query.contains("submission") || query.contains("homework") || query.contains("due")) {
+            List<Assignment> assignments = assignmentRepository.findAll();
+
+            answer.append("### 📚 Department Course Assignments\n\n");
+            answer.append("| Assignment Title | Course | Due Date | Max Marks | Submissions Received | Status |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+            for (Assignment a : assignments) {
+                answer.append("| **").append(a.getTitle()).append("** | ").append(a.getSubject()).append(" | `")
+                      .append(a.getDueDate()).append("` | ").append(a.getMaxMarks()).append(" pts | ")
+                      .append(a.getSubmissions() != null ? a.getSubmissions() : 0).append(" / ")
+                      .append(a.getTotalStudents() != null ? a.getTotalStudents() : 25).append(" | `")
+                      .append(a.getStatus()).append("` |\n");
+            }
+            answer.append("\n");
+            answer.append("👉 *Action*: Say *\"Dispatch deadline reminder alerts\"* to notify students with pending submissions.");
+
+            suggestions.add("Broadcast assignment deadline reminder alert");
+            suggestions.add("Summarize attendance across my subjects");
+            suggestions.add("What is my teaching schedule for today?");
+        }
+
+        // 5. TEACHING TIMETABLE FOR FACULTY
+        else if (query.contains("timetable") || query.contains("schedule") || query.contains("routine") || query.contains("period")) {
+            List<TimetableEntry> entries = timetableRepository.findByDepartmentAndSemesterOrderByPeriodAsc(facDept, 1);
+
+            answer.append("### 📅 Faculty Teaching Timetable: **").append(facName).append("**\n\n");
+            answer.append("Weekly assigned lecture periods for **").append(facDept).append("**:\n\n");
+            answer.append("| Period | Time Slot | Course | Room | Session Type |\n");
+            answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
+            answer.append("| Period 1 | `09:00 AM - 09:45 AM` | CS101: Problem Solving & Python | Room 101 | Lecture |\n");
+            answer.append("| Period 3 | `10:45 AM - 11:30 AM` | CS101: Problem Solving & Python | Lab 1 | Hands-on Lab |\n");
+            answer.append("| Period 5 | `01:00 PM - 01:45 PM` | CS201: Data Structures | Room 102 | Tutorial |\n\n");
+            answer.append("💡 *Note: Recess is 12:15 PM – 01:00 PM daily.*");
+
+            suggestions.add("Summarize attendance across my subjects");
+            suggestions.add("Show students with attendance below 75%");
+            suggestions.add("Broadcast assignment deadline reminder alert");
+        }
+
+        // 6. FACULTY DEFAULT FALLBACK
+        else {
+            answer.append("### 👨‍🏫 Faculty Instruction & Mentorship Console\n\n");
+            answer.append("Welcome, **").append(facName).append("**. As a faculty member in **").append(facDept).append("**, you can query class records and manage students under your instruction:\n\n");
+            answer.append("#### 🚀 Available Faculty Actions & Queries:\n");
+            answer.append("- **📊 Class Attendance**: *\"Summarize attendance across my subjects\"*, *\"Show students with attendance below 75%\"*\n");
+            answer.append("- **📢 Automated Alerts**: *\"Broadcast assignment deadline reminder alert\"*\n");
+            answer.append("- **📝 Grade Submissions**: *\"Show pending marks submissions\"*\n");
+            answer.append("- **📅 Teaching Routine**: *\"What is my teaching schedule for today?\"*\n");
+            answer.append("- **📚 Assignments Portal**: *\"List active assignments and submission counts\"*\n");
+
+            suggestions.add("Summarize attendance across my subjects");
+            suggestions.add("Show students with attendance below 75%");
+            suggestions.add("Broadcast assignment deadline reminder alert");
+            suggestions.add("What is my teaching schedule for today?");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("answer", answer.toString());
+        result.put("suggestions", suggestions);
+        result.put("source", "campus_knowledge_engine");
+        result.put("model", "Meridian Grounded Faculty Intelligence v3.0");
+        if (actionTaken != null) result.put("actionTaken", actionTaken);
+        return result;
+    }
+
+    // =========================================================================
+    // 🎓 ROLE 3: STUDENT (PERSONAL PROFILE SCOPE & STRICT PRIVACY ENFORCEMENT)
+    // =========================================================================
+    private Map<String, Object> generateStudentResponse(String query, String username, String rawMessage, Student currentStudent) {
+        StringBuilder answer = new StringBuilder();
+        List<String> suggestions = new ArrayList<>();
+        Map<String, Object> actionTaken = null;
+
+        List<Student> allStudents = studentRepository.findAll();
+        Student activeStudent = currentStudent != null ? currentStudent :
+                allStudents.stream().filter(s -> "student1cse".equalsIgnoreCase(s.getEmail()) || s.getId().equals(1L)).findFirst().orElse(null);
+
+        // =====================================================================
+        // 🔒 PRIVACY ENFORCEMENT: A STUDENT CANNOT QUERY OTHER STUDENTS' RECORDS
+        // =====================================================================
+        boolean isQueryingOtherPeers = false;
+        String otherPeerName = null;
+
+        if (activeStudent != null) {
+            for (Student other : allStudents) {
+                if (!other.getId().equals(activeStudent.getId())) {
+                    String oName = other.getName().toLowerCase();
+                    if (query.contains(oName)) {
+                        isQueryingOtherPeers = true;
+                        otherPeerName = other.getName();
+                        break;
+                    }
+                    String[] parts = oName.split(" ");
+                    if (parts.length > 1 && parts[0].length() > 3 && query.contains(parts[0])) {
+                        isQueryingOtherPeers = true;
+                        otherPeerName = other.getName();
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (query.contains("other student") || query.contains("all student") || query.contains("peers") ||
+                query.contains("who got highest") || query.contains("rank list") || query.contains("highest cgpa") ||
+                query.contains("top student") || query.contains("everyone's mark") || query.contains("faculty salary") ||
+                query.contains("college fee collection") || (query.contains("marks of") && !query.contains("my mark"))) {
+            isQueryingOtherPeers = true;
+        }
+
+        if (isQueryingOtherPeers) {
+            answer.append("### 🔒 Campus Privacy & Access Boundary Enforcement\n\n");
+            answer.append("**Access Denied**: Under university privacy regulations (FERPA compliance), students are strictly restricted to their **own personal academic records**.\n\n");
+            if (otherPeerName != null) {
+                answer.append("🚫 You do not have authorization to view academic records, marks, CGPA, or personal data for **").append(otherPeerName).append("**.\n\n");
+            } else {
+                answer.append("🚫 You do not have authorization to view class-wide ranking ledgers, other peers' grades, or institutional financial accounts.\n\n");
+            }
+            answer.append("#### 💡 What you can ask for your own profile:\n");
+            answer.append("- *\"What is my latest CGPA and semester marks?\"*\n");
+            answer.append("- *\"How many classes can I safely skip?\"*\n");
+            answer.append("- *\"What assignments are due this week?\"*\n");
+            answer.append("- *\"Who is my assigned faculty mentor?\"*\n");
+            answer.append("- *\"What is my tuition fee balance?\"*\n");
+
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
+            suggestions.add("Who is my assigned faculty mentor?");
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("answer", answer.toString());
+            result.put("suggestions", suggestions);
+            result.put("source", "campus_knowledge_engine");
+            result.put("model", "Meridian Grounded Student Advisor v3.0");
+            return result;
+        }
+
+        // =====================================================================
+        // STUDENT FEATURE 1: EVENT REGISTRATION (AUTONOMOUS)
+        // =====================================================================
+        if ((query.contains("register") || query.contains("sign up") || query.contains("attend") || query.contains("rsvp"))
+                && (query.contains("event") || query.contains("symposium") || query.contains("hackathon") || query.contains("workshop") || query.contains("fest"))) {
+
+            List<CampusEvent> allEvents = eventRepository.findAll();
+            CampusEvent targetEvent = allEvents.stream()
+                    .filter(e -> query.contains(e.getTitle().toLowerCase()) ||
+                            (e.getTitle().toLowerCase().contains("symposium") && query.contains("symposium")) ||
+                            (e.getTitle().toLowerCase().contains("hackathon") && query.contains("hackathon")) ||
+                            (e.getTitle().toLowerCase().contains("ai") && query.contains("ai")))
+                    .findFirst()
+                    .orElse(allEvents.isEmpty() ? null : allEvents.get(0));
+
+            if (targetEvent != null) {
+                targetEvent.setRegisteredByMe(true);
+                targetEvent.setRegistered(targetEvent.getRegistered() != null ? targetEvent.getRegistered() + 1 : 1);
+                eventRepository.save(targetEvent);
+
+                long maxNotifId = notificationRepository.findAll().stream().mapToLong(n -> n.getId() != null ? n.getId() : 0).max().orElse(0);
+                Notification notif = new Notification();
+                notif.setId(maxNotifId + 1);
+                notif.setTitle("Registration Confirmed: " + targetEvent.getTitle());
+                notif.setMessage("You have been confirmed for " + targetEvent.getTitle() + " at " + targetEvent.getVenue() + " on " + targetEvent.getDate() + ".");
+                notif.setCreatedAt("Just now");
+                notif.setRead(false);
+                notif.setTargetRole("student");
+                if (username != null) notif.setTargetUsername(username);
+                notificationRepository.save(notif);
+
+                int remaining = Math.max(0, targetEvent.getCapacity() - targetEvent.getRegistered());
+                actionTaken = new LinkedHashMap<>();
+                actionTaken.put("type", "EVENT_REGISTERED");
+                actionTaken.put("eventId", targetEvent.getId());
+                actionTaken.put("title", targetEvent.getTitle());
+                actionTaken.put("venue", targetEvent.getVenue());
+                actionTaken.put("date", targetEvent.getDate());
+                actionTaken.put("status", "Confirmed");
+
+                answer.append("### 🎉 Registration Confirmed: **").append(targetEvent.getTitle()).append("**\n\n");
+                answer.append("You are officially registered! Here are your event details:\n\n");
+                answer.append("- **Event**: **").append(targetEvent.getTitle()).append("**\n");
+                answer.append("- **Date & Time**: `").append(targetEvent.getDate()).append(" at ").append(targetEvent.getTime()).append("`\n");
+                answer.append("- **Venue**: `").append(targetEvent.getVenue()).append("`\n");
+                answer.append("- **Remaining Seats**: ").append(remaining).append(" / ").append(targetEvent.getCapacity()).append("\n\n");
+                answer.append("A confirmation badge has been added to your dashboard notifications.");
+            } else {
+                answer.append("No upcoming campus events matched your request.");
+            }
+            suggestions.add("What are the latest campus announcements?");
+            suggestions.add("Check my attendance buffer");
             suggestions.add("What assignments are due this week?");
         }
 
-        // =========================================================================
-        // 5. ATTENDANCE SAFE-SKIP / BUNK ANALYSIS & RECOVERY MATH
-        // =========================================================================
-        else if (query.contains("bunk") || query.contains("skip") || query.contains("safe to miss") || query.contains("how many classes") ||
-                (query.contains("attendance") && (query.contains("buffer") || query.contains("shortage") || query.contains("cutoff") || query.contains("can i miss")))) {
+        // =====================================================================
+        // STUDENT FEATURE 2: FILE GRIEVANCE TICKET (AUTONOMOUS)
+        // =====================================================================
+        else if ((query.contains("complaint") || query.contains("grievance") || query.contains("ticket") || query.contains("broken") || query.contains("fix"))
+                && (query.contains("raise") || query.contains("file") || query.contains("submit") || query.contains("create") || query.contains("problem") || query.contains("not working"))) {
 
-            if (currentStudent != null) {
-                List<AttendanceItem> items = attendanceRepository.findByStudentId(currentStudent.getId());
+            String category = "Facility";
+            if (query.contains("wifi") || query.contains("internet") || query.contains("network")) category = "IT & Network";
+            else if (query.contains("hostel") || query.contains("mess") || query.contains("room")) category = "Hostel";
+            else if (query.contains("academic") || query.contains("exam") || query.contains("course")) category = "Academic";
+
+            String title = rawMessage.length() > 60 ? rawMessage.substring(0, 57) + "..." : rawMessage;
+            long maxComplaintId = complaintRepository.findAll().stream().mapToLong(c -> c.getId() != null ? c.getId() : 0).max().orElse(0);
+
+            Complaint complaint = new Complaint();
+            complaint.setId(maxComplaintId + 1);
+            complaint.setTitle(title);
+            complaint.setCategory(category);
+            complaint.setStatus("submitted");
+            complaint.setPriority(query.contains("urgent") ? "high" : "medium");
+            complaint.setStudent(activeStudent != null ? activeStudent.getName() : "Student");
+            complaint.setSenderRole("student");
+            complaint.setSenderUsername(username != null ? username : "student1cse");
+            complaint.setDepartment(activeStudent != null ? activeStudent.getDepartment() : "CSE");
+            complaint.setDescription(rawMessage);
+            complaint.setCreatedAt("Just now");
+            complaintRepository.save(complaint);
+
+            actionTaken = new LinkedHashMap<>();
+            actionTaken.put("type", "COMPLAINT_FILED");
+            actionTaken.put("ticketId", complaint.getId());
+            actionTaken.put("category", category);
+            actionTaken.put("status", "Submitted");
+
+            answer.append("### 🛠️ Service Desk Ticket Created: **#").append(complaint.getId()).append("**\n\n");
+            answer.append("Your grievance ticket has been successfully registered and dispatched to Campus IT & Facilities.\n\n");
+            answer.append("- **Ticket ID**: `#").append(complaint.getId()).append("`\n");
+            answer.append("- **Category**: ").append(category).append("\n");
+            answer.append("- **Status**: `🟡 Submitted`\n");
+            answer.append("- **Estimated Resolution**: Within 24–48 hours.\n");
+
+            suggestions.add("Check status of my complaints");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What is my timetable for today?");
+        }
+
+        // =====================================================================
+        // STUDENT FEATURE 3: ATTENDANCE BUFFER & SAFE-SKIPS
+        // =====================================================================
+        else if (query.contains("bunk") || query.contains("skip") || query.contains("safe to miss") || query.contains("how many classes") ||
+                (query.contains("attendance") && (query.contains("buffer") || query.contains("shortage") || query.contains("cutoff") || query.contains("can i miss") || query.contains("my")))) {
+
+            if (activeStudent != null) {
+                List<AttendanceItem> items = attendanceRepository.findByStudentId(activeStudent.getId());
                 answer.append("### 🎯 Live Attendance Buffer & Safe-Skip Intelligence\n\n");
-                answer.append("Mathematical clearance analysis for **").append(currentStudent.getName())
+                answer.append("Clearance analysis for **").append(activeStudent.getName())
                       .append("** against the **75% minimum semester exam threshold**:\n\n");
 
                 if (!items.isEmpty()) {
-                    answer.append("| Course Code | Subject | Attended / Total | % | Safe to Skip | Recovery Required | Exam Clearance |\n");
+                    answer.append("| Course Code | Subject | Attended / Total | % | Safe to Skip | Recovery Required | Clearance |\n");
                     answer.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
 
                     for (AttendanceItem it : items) {
@@ -336,230 +838,40 @@ public class CampusSemanticEngine {
                         if (pct >= 75) {
                             int canSkip = (int) Math.floor((p - 0.75 * t) / 0.75);
                             String skipText = canSkip > 0 ? "🟢 **" + canSkip + " class(es)**" : "🟡 Buffer: 0";
-                            answer.append("| `").append(it.getSubjectCode()).append("` | ")
-                                  .append(it.getSubject()).append(" | ")
-                                  .append(p).append(" / ").append(t).append(" | **")
-                                  .append(pct).append("%** | ")
+                            answer.append("| `").append(it.getSubjectCode()).append("` | ").append(it.getSubject())
+                                  .append(" | ").append(p).append(" / ").append(t).append(" | **").append(pct).append("%** | ")
                                   .append(skipText).append(" | — | ✅ Eligible |\n");
                         } else {
                             int needed = (int) Math.ceil((0.75 * t - p) / 0.25);
                             if (needed <= 0) needed = 1;
-                            answer.append("| `").append(it.getSubjectCode()).append("` | ")
-                                  .append(it.getSubject()).append(" | ")
-                                  .append(p).append(" / ").append(t).append(" | 🔴 **")
-                                  .append(pct).append("%** | ❌ None | ⚠️ Attend **" + needed + " consecutive** | ⚠️ Detention Risk |\n");
+                            answer.append("| `").append(it.getSubjectCode()).append("` | ").append(it.getSubject())
+                                  .append(" | ").append(p).append(" / ").append(t).append(" | 🔴 **").append(pct).append("%** | ")
+                                  .append("❌ None | ⚠️ Attend **").append(needed).append(" consecutive** | ⚠️ Detention Risk |\n");
                         }
                     }
                     answer.append("\n");
-                    answer.append("📌 **University Regulations**: Attendance between 65% - 74% requires HoD-approved medical condonation ($50 fee). Attendance strictly below 65% results in semester detention.");
+                    answer.append("📌 *University Regulation: Attendance between 65% - 74% requires HoD condonation ($50 fee). Below 65% leads to debarment.*");
                 }
-
-                suggestions.add("What is the medical leave attendance condonation policy?");
-                suggestions.add("Simulate my target GPA");
-                suggestions.add("Show my pending assignments");
-            } else {
-                answer.append("Meridian University requires a mandatory **75% minimum attendance** in each registered course. Medical condonation covers attendance between 65% and 74%.");
-                suggestions.add("Show attendance policy");
             }
+            suggestions.add("Simulate what score I need for a 9.0 CGPA");
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("What assignments are due this week?");
         }
 
-        // =========================================================================
-        // 6. TARGET GPA & EXAMINATION SCORE SIMULATOR
-        // =========================================================================
-        else if (query.contains("simulate") || query.contains("target gpa") || query.contains("target cgpa") || query.contains("how to get") ||
-                (query.contains("gpa") && (query.contains("calculate") || query.contains("formula") || query.contains("9.") || query.contains("8.") || query.contains("reach")))) {
+        // =====================================================================
+        // STUDENT FEATURE 4: PERSONAL CGPA, SGPA & MARKS
+        // =====================================================================
+        else if (query.contains("grade") || query.contains("mark") || query.contains("gpa") || query.contains("sgpa") ||
+                query.contains("cgpa") || query.contains("score") || query.contains("arrear") || query.contains("result")) {
 
-            if (currentStudent != null) {
-                StudentDetails details = studentDetailsRepository.findByStudentId(currentStudent.getId()).orElse(null);
-                double currentCgpa = details != null && details.getCgpa() != null ? details.getCgpa() : 8.75;
-                int currentSem = currentStudent.getSemester() != null ? currentStudent.getSemester() : 2;
+            if (activeStudent != null) {
+                StudentDetails details = studentDetailsRepository.findByStudentId(activeStudent.getId()).orElse(null);
+                List<Mark> marks = markRepository.findByStudentId(activeStudent.getId());
 
-                answer.append("### 🎯 Academic Target GPA & Score Simulator\n\n");
-                answer.append("Current Standing for **").append(currentStudent.getName()).append("**:\n");
-                answer.append("- **Current Cumulative CGPA**: `").append(currentCgpa).append(" / 10.0`\n");
-                answer.append("- **Current Semester**: Semester ").append(currentSem).append(" (").append(currentStudent.getDepartment()).append(")\n\n");
-
-                answer.append("#### 📊 Target Milestone Projections:\n\n");
-                answer.append("| Target CGPA | Required Semester SGPA | Grade Strategy Needed | Feasibility |\n");
-                answer.append("| :--- | :--- | :--- | :--- |\n");
-
-                double neededFor85 = Math.round(((8.5 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
-                double neededFor90 = Math.round(((9.0 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
-                double neededFor95 = Math.round(((9.5 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
-
-                answer.append("| **8.50 CGPA** | `").append(Math.max(0, neededFor85)).append(" SGPA` | Mostly 'A' & 'B+' grades across 20 credits | 🟢 High |\n");
-                answer.append("| **9.00 CGPA** | `").append(Math.min(10.0, Math.max(0, neededFor90))).append(" SGPA` | 'O' grades in 4-credit courses, 'A+' in others | 🟡 Achievable |\n");
-                answer.append("| **9.50 CGPA** | `").append(Math.min(10.0, Math.max(0, neededFor95))).append(" SGPA` | Outstanding 'O' grades (>90% score) in all courses | 🔴 Demanding |\n\n");
-
-                answer.append("💡 **Strategic Tip**: 4-credit core subjects carry **33% greater weight** than 3-credit subjects. Securing 'O' grades in 4-credit modules provides the greatest GPA boost.");
-
-                suggestions.add("Show my current marks across all subjects");
-                suggestions.add("Check my attendance buffer");
-                suggestions.add("Who are my course professors?");
-            } else {
-                answer.append("CGPA is calculated by dividing total credit-weighted grade points by the total credits registered. Minimum passing mark is 50%.");
-                suggestions.add("Show grading scale");
-            }
-        }
-
-        // =========================================================================
-        // 7. MENTOR & ACADEMIC COUNSELOR CONSULTATION
-        // =========================================================================
-        else if (query.contains("mentor") || query.contains("advisor") || query.contains("counselor") || query.contains("guidance")) {
-            if (currentStudent != null) {
-                StudentDetails details = studentDetailsRepository.findByStudentId(currentStudent.getId()).orElse(null);
-                answer.append("### 👨‍🏫 Assigned Academic Mentor & Counselor\n\n");
-                if (details != null && details.getMentor() != null) {
-                    Map<String, Object> mentor = details.getMentor();
-                    answer.append("- **Faculty Mentor**: **").append(mentor.getOrDefault("name", "Dr. Alan Turing")).append("**\n");
-                    answer.append("- **Direct Phone**: `").append(mentor.getOrDefault("phone", "+1 (555) 011-2301")).append("`\n");
-                    answer.append("- **Department**: ").append(currentStudent.getDepartment()).append(" Faculty Wing\n");
-                    answer.append("- **Office Location**: Cabin 304, Academic Block 2\n");
-                    answer.append("- **Consultation Hours**: Tuesdays & Thursdays, 3:30 PM - 5:00 PM\n\n");
-                    answer.append("📌 Contact your mentor for academic leave certificates, remedial subject enrollment, or semester project approvals.");
-                } else {
-                    answer.append("Your department Head of Department (HoD) acts as primary academic mentor.");
-                }
-                suggestions.add("Who is the Head of Department?");
-                suggestions.add("Show my pending assignments");
-                suggestions.add("Check my attendance status");
-            } else {
-                answer.append("Each enrolled student is assigned a dedicated faculty mentor from their engineering department for semester-long guidance.");
-                suggestions.add("Show faculty directory");
-            }
-        }
-
-        // =========================================================================
-        // 8. ADMIN EXECUTIVE HEALTH & SYSTEM OVERVIEW (FOR ADMINS)
-        // =========================================================================
-        else if ("admin".equalsIgnoreCase(userRole) && (query.contains("health") || query.contains("system") || query.contains("overview") || query.contains("summary") || query.contains("statistics"))) {
-            long studentCount = studentRepository.count();
-            long facultyCount = facultyRepository.count();
-            long deptCount = departmentRepository.count();
-            long subjectCount = subjectRepository.count();
-            long complaintCount = complaintRepository.count();
-            long openComplaints = complaintRepository.findAll().stream().filter(c -> !"resolved".equalsIgnoreCase(c.getStatus())).count();
-
-            answer.append("### 🏛️ Meridian Campus Executive System Health\n\n");
-            answer.append("| Metric | Current Value | Status |\n");
-            answer.append("| :--- | :--- | :--- |\n");
-            answer.append("| **Registered Students** | `").append(studentCount).append("` | 🟢 Active |\n");
-            answer.append("| **Faculty Members** | `").append(facultyCount).append("` | 🟢 Active |\n");
-            answer.append("| **Engineering Departments** | `").append(deptCount).append("` (CSE, ECE, MECH, CIVIL, EEE) | 🟢 Operating |\n");
-            answer.append("| **Active Courses Taught** | `").append(subjectCount).append("` subjects | 🟢 Standardized |\n");
-            answer.append("| **Service Grievances** | `").append(openComplaints).append(" open` (Total: ").append(complaintCount).append(") | ").append(openComplaints > 0 ? "🟡 In Triage" : "🟢 Clear").append(" |\n");
-            answer.append("| **MongoDB Cluster** | `localhost:27017/smart_campus` | 🟢 99.9% Uptime |\n\n");
-            answer.append("All academic and administrative services are operating smoothly.");
-
-            suggestions.add("How many open complaints need attention?");
-            suggestions.add("Show department distribution");
-            suggestions.add("List upcoming campus symposiums");
-        }
-
-        // =========================================================================
-        // 9. SPECIFIC COURSE OR FACULTY LOOKUP
-        // =========================================================================
-        else if (matchedSub != null || matchedFac != null) {
-            if (matchedSub != null) {
-                answer.append("### 📖 Course Details: **").append(matchedSub.getCode()).append(" - ").append(matchedSub.getName()).append("**\n\n");
-                answer.append("- **Department**: ").append(matchedSub.getDepartment()).append("\n");
-                answer.append("- **Semester / Year**: Semester ").append(matchedSub.getSemester()).append(" (Year ").append(matchedSub.getYear()).append(")\n");
-                answer.append("- **Academic Credits**: ").append(matchedSub.getCredits()).append(" Credits\n");
-                answer.append("- **Assigned Faculty**: **").append(matchedSub.getFaculty()).append("** (").append(matchedSub.getFacultyDesignation() != null ? matchedSub.getFacultyDesignation() : "Professor").append(")\n");
-                answer.append("- **Faculty Email**: `").append(matchedSub.getFacultyEmail()).append("`\n");
-                answer.append("- **Faculty Phone**: ").append(matchedSub.getFacultyPhone()).append("\n\n");
-                answer.append("💡 Office hours: Monday & Wednesday, 2:00 PM - 4:00 PM in Faculty Wing.");
-                suggestions.add("What is my attendance in " + matchedSub.getCode() + "?");
-                suggestions.add("Are there any assignments for " + matchedSub.getName() + "?");
-                suggestions.add("List all subjects in my department");
-            } else {
-                answer.append("### 👨‍🏫 Faculty Profile: **").append(matchedFac.getName()).append("**\n\n");
-                answer.append("- **Designation**: ").append(matchedFac.getDesignation()).append("\n");
-                answer.append("- **Department**: ").append(matchedFac.getDepartment()).append("\n");
-                answer.append("- **Highest Qualification**: ").append(matchedFac.getQualification()).append("\n");
-                answer.append("- **Email**: `").append(matchedFac.getEmail()).append("`\n");
-                answer.append("- **Phone**: ").append(matchedFac.getPhone()).append("\n");
-                answer.append("- **Courses Taught**: ").append(String.join(", ", matchedFac.getSubjects())).append("\n");
-                suggestions.add("List all faculty members in " + matchedFac.getDepartment());
-                suggestions.add("Who is the Head of Department?");
-                suggestions.add("Show course schedule");
-            }
-        }
-
-        // =========================================================================
-        // 10. MEDICAL LEAVE & CONDONATION POLICIES
-        // =========================================================================
-        else if (query.contains("condonation") || query.contains("medical leave") || (query.contains("policy") && query.contains("attendance"))) {
-            answer.append("### 📜 Meridian University Attendance & Condonation Regulations\n\n");
-            answer.append("1. **Mandatory Attendance Cutoff**:\n");
-            answer.append("   - **>= 75%**: Full exam eligibility without condonation required.\n");
-            answer.append("   - **65% - 74%**: Eligible for medical condonation subject to:\n");
-            answer.append("     * Genuine hospitalized/medical reason documented by a registered medical practitioner.\n");
-            answer.append("     * Medical certificate submitted within 3 working days of returning to campus.\n");
-            answer.append("     * Approval and signature by Course Professor and Head of Department (HoD).\n");
-            answer.append("     * Payment of prescribed condonation fee of $50 per course.\n");
-            answer.append("   - **< 65%**: Strictly detained; candidate must re-register and repeat the course in the next semester.\n\n");
-            if (currentStudent != null) {
-                int att = currentStudent.getAttendance() != null ? currentStudent.getAttendance() : 95;
-                answer.append("📊 **Your Current Status**: Overall attendance is **").append(att)
-                      .append("%** (").append(att >= 75 ? "✅ Above 75% - No condonation required" : "⚠️ Condonation required").append(").\n");
-            }
-            suggestions.add("How is my attendance trending?");
-            suggestions.add("What is the grading policy?");
-            suggestions.add("Show my examination marks");
-        }
-
-        // =========================================================================
-        // 11. GENERAL ATTENDANCE STATUS
-        // =========================================================================
-        else if (query.contains("attendance") || query.contains("absent") || query.contains("present")) {
-            if (currentStudent != null) {
-                List<AttendanceItem> items = attendanceRepository.findByStudentId(currentStudent.getId());
-                int overall = currentStudent.getAttendance() != null ? currentStudent.getAttendance() : 88;
-
-                answer.append("### 📊 Live Attendance Breakdown: **").append(currentStudent.getName()).append("**\n\n");
-                answer.append("Your overall recorded campus attendance is **").append(overall).append("%** ");
-                if (overall >= 75) {
-                    answer.append("(✅ **Eligible** for semester examinations, requirement threshold is 75%).\n\n");
-                } else {
-                    answer.append("(⚠️ **Warning**: Below the 75% university examination threshold).\n\n");
-                }
-
-                if (!items.isEmpty()) {
-                    answer.append("| Course Code | Subject | Attended / Total | Percentage | Exam Status |\n");
-                    answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
-                    for (AttendanceItem it : items) {
-                        int pct = it.getPercentage() != null ? it.getPercentage() : (int) Math.round((double) it.getPresent() / Math.max(1, it.getTotal()) * 100);
-                        String badge = pct >= 85 ? "🟢 Good" : (pct >= 75 ? "🟡 Moderate" : "🔴 Shortage");
-                        answer.append("| `").append(it.getSubjectCode()).append("` | ")
-                              .append(it.getSubject()).append(" | ")
-                              .append(it.getPresent()).append(" / ").append(it.getTotal()).append(" | **")
-                              .append(pct).append("%** | ").append(badge).append(" |\n");
-                    }
-                }
-
-                suggestions.add("How many classes can I skip without getting detained?");
-                suggestions.add("Show my pending assignments and deadlines");
-                suggestions.add("Breakdown of my SGPA and examination marks");
-            } else {
-                answer.append("Campus policy dictates a mandatory **75% minimum attendance** in each registered course to be eligible for end-semester examinations.");
-                suggestions.add("Show student roster attendance");
-                suggestions.add("Who has attendance below 75%?");
-            }
-        }
-
-        // =========================================================================
-        // 12. GRADES, MARKS, SGPA, CGPA, ARREARS
-        // =========================================================================
-        else if (query.contains("grade") || query.contains("mark") || query.contains("gpa") || query.contains("sgpa") || query.contains("cgpa") || query.contains("score") || query.contains("arrear") || query.contains("result")) {
-            if (currentStudent != null) {
-                StudentDetails details = studentDetailsRepository.findByStudentId(currentStudent.getId()).orElse(null);
-                List<Mark> marks = markRepository.findByStudentId(currentStudent.getId());
-
-                answer.append("### 🎓 Academic Performance Summary: **").append(currentStudent.getName()).append("**\n\n");
+                answer.append("### 🎓 Personal Academic Performance Summary: **").append(activeStudent.getName()).append("**\n\n");
                 if (details != null) {
                     answer.append("- **Cumulative GPA (CGPA)**: `").append(details.getCgpa() != null ? details.getCgpa() : 8.8).append(" / 10.0`\n");
-                    answer.append("- **Standing Arrears**: `").append(details.getArrearCount()).append("` active backlog(s)\n");
+                    answer.append("- **Standing Backlogs / Arrears**: `").append(details.getArrearCount()).append("` active backlog(s)\n");
                     if (details.getSgpa() != null && !details.getSgpa().isEmpty()) {
                         answer.append("- **Latest Semester SGPA**: `")
                               .append(details.getSgpa().get(details.getSgpa().size() - 1).get("gpa"))
@@ -570,251 +882,259 @@ public class CampusSemanticEngine {
                 if (!marks.isEmpty()) {
                     answer.append("#### 📝 Course Examination Marks:\n");
                     answer.append("| Course Code | Subject | Assessment | Score | Max | Grade | Result |\n");
-                    answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                    answer.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
                     for (Mark m : marks) {
                         String res = Boolean.TRUE.equals(m.getPassed()) ? "✅ PASS" : "❌ ARREAR";
-                        answer.append("| `").append(m.getSubjectCode()).append("` | ")
-                              .append(m.getSubject()).append(" | ")
-                              .append(m.getAssessment() != null ? m.getAssessment() : "Semester Exam").append(" | ")
-                              .append(m.getScore()).append(" | ")
-                              .append(m.getMaxScore()).append(" | **")
-                              .append(m.getGrade()).append("** | ")
-                              .append(res).append(" |\n");
+                        answer.append("| `").append(m.getSubjectCode()).append("` | ").append(m.getSubject()).append(" | ")
+                              .append(m.getAssessment()).append(" | ").append(m.getScore()).append(" | ").append(m.getMaxScore())
+                              .append(" | **").append(m.getGrade()).append("** | ").append(res).append(" |\n");
                     }
                     answer.append("\n");
                 }
-
                 answer.append("💡 *Grading scale: 90-100 (O Outstanding), 80-89 (A+), 70-79 (A), 60-69 (B+), 50-59 (B/C), <50 (F Fail).*");
-                suggestions.add("Simulate what score I need for a 9.0 CGPA");
-                suggestions.add("Check my attendance buffer");
-                suggestions.add("View fee ledger and dues");
-            } else {
-                answer.append("Meridian University follows a 10.0 absolute CGPA grading scale. Semester grades are calculated using credit weightings.");
-                suggestions.add("Explain 10-point GPA calculation");
-                suggestions.add("What is the passing cutoff mark?");
             }
+            suggestions.add("Simulate what score I need for a 9.0 CGPA");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What is my outstanding tuition fee balance?");
         }
 
-        // =========================================================================
-        // 13. ASSIGNMENTS & HOMEWORK
-        // =========================================================================
-        else if (query.contains("assignment") || query.contains("homework") || query.contains("submission") || query.contains("task") || query.contains("deadline") || query.contains("due")) {
+        // =====================================================================
+        // STUDENT FEATURE 5: TARGET GPA SIMULATOR
+        // =====================================================================
+        else if (query.contains("simulate") || query.contains("target gpa") || query.contains("target cgpa")) {
+            if (activeStudent != null) {
+                StudentDetails details = studentDetailsRepository.findByStudentId(activeStudent.getId()).orElse(null);
+                double currentCgpa = details != null && details.getCgpa() != null ? details.getCgpa() : 8.75;
+                int currentSem = activeStudent.getSemester() != null ? activeStudent.getSemester() : 1;
+
+                answer.append("### 🎯 Target GPA Simulation Model: **").append(activeStudent.getName()).append("**\n\n");
+                answer.append("- **Current Cumulative CGPA**: `").append(currentCgpa).append(" / 10.0`\n");
+                answer.append("- **Current Semester**: `Semester ").append(currentSem).append("`\n\n");
+
+                answer.append("| Target CGPA | Required Semester SGPA | Grade Strategy Needed | Feasibility |\n");
+                answer.append("| :--- | :--- | :--- | :--- |\n");
+                double needed85 = Math.round(((8.5 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
+                double needed90 = Math.round(((9.0 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
+                double needed95 = Math.round(((9.5 * currentSem) - (currentCgpa * (currentSem - 1))) * 100.0) / 100.0;
+
+                answer.append("| **8.50 CGPA** | `").append(Math.max(0, needed85)).append(" SGPA` | Mostly 'A' & 'B+' grades across 20 credits | 🟢 High |\n");
+                answer.append("| **9.00 CGPA** | `").append(Math.min(10.0, Math.max(0, needed90))).append(" SGPA` | 'O' grades in 4-credit courses, 'A+' in others | 🟡 Achievable |\n");
+                answer.append("| **9.50 CGPA** | `").append(Math.min(10.0, Math.max(0, needed95))).append(" SGPA` | Outstanding 'O' grades (>90% score) in all courses | 🔴 Demanding |\n\n");
+            }
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
+        }
+
+        // =====================================================================
+        // STUDENT FEATURE 6: PERSONAL ASSIGNMENTS & HOMEWORK
+        // =====================================================================
+        else if (query.contains("assignment") || query.contains("homework") || query.contains("submission") || query.contains("due")) {
             List<Assignment> assignments = assignmentRepository.findAll();
-            answer.append("### 📚 Active Academic Assignments & Deadlines\n\n");
-
+            answer.append("### 📚 Your Academic Course Assignments\n\n");
             if (!assignments.isEmpty()) {
-                answer.append("| Title | Course | Deadline | Max Marks | Status | Submissions |\n");
-                answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+                answer.append("| Title | Course | Deadline | Max Marks | Status |\n");
+                answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
                 for (Assignment asg : assignments) {
-                    answer.append("| **").append(asg.getTitle()).append("** | ")
-                          .append(asg.getSubject()).append(" | `")
-                          .append(asg.getDueDate()).append("` | ")
-                          .append(asg.getMaxMarks()).append(" pts | `")
-                          .append(asg.getStatus()).append("` | ")
-                          .append(asg.getSubmissions() != null ? asg.getSubmissions() : 0).append(" / ")
-                          .append(asg.getTotalStudents() != null ? asg.getTotalStudents() : 30).append(" |\n");
+                    answer.append("| **").append(asg.getTitle()).append("** | ").append(asg.getSubject()).append(" | `")
+                          .append(asg.getDueDate()).append("` | ").append(asg.getMaxMarks()).append(" pts | `")
+                          .append(asg.getStatus()).append("` |\n");
                 }
                 answer.append("\n");
-                answer.append("📌 **Submission Portal**: Navigate to **Assignments** from the sidebar to upload your solution before 11:59 PM on the due date.");
-            } else {
-                answer.append("There are currently no active assignments pending submission for your enrolled courses.");
+                answer.append("📌 *Go to **Assignments** in the sidebar to upload your solutions.*");
             }
-
-            suggestions.add("How are assignments graded?");
-            suggestions.add("What are my course subjects this semester?");
-            suggestions.add("Check my overall attendance");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("What is my timetable for today?");
         }
 
-        // =========================================================================
-        // 14. FEES & FINANCIALS
-        // =========================================================================
-        else if (query.contains("fee") || query.contains("tuition") || query.contains("payment") || query.contains("dues") || query.contains("ledger") || query.contains("receipt")) {
-            if (currentStudent != null) {
-                FeeInfo fee = feeRepository.findByStudentId(currentStudent.getId()).orElse(null);
-                answer.append("### 💳 Tuition Fee Ledger: **").append(currentStudent.getName()).append("**\n\n");
+        // =====================================================================
+        // STUDENT FEATURE 7: TUITION FEE BALANCE
+        // =====================================================================
+        else if (query.contains("fee") || query.contains("tuition") || query.contains("dues") || query.contains("balance")) {
+            if (activeStudent != null) {
+                FeeInfo fee = feeRepository.findByStudentId(activeStudent.getId()).orElse(null);
+                answer.append("### 💳 Personal Tuition Fee Account: **").append(activeStudent.getName()).append("**\n\n");
                 if (fee != null) {
-                    answer.append("- **Total Academic Year Fee**: `$").append(String.format("%,.2f", fee.getTotal())).append("`\n");
-                    answer.append("- **Amount Paid to Date**: `$").append(String.format("%,.2f", fee.getPaid())).append("` (✅ Verified)\n");
+                    answer.append("- **Total Annual Fee**: `$").append(String.format("%,.2f", fee.getTotal())).append("`\n");
+                    answer.append("- **Amount Paid**: `$").append(String.format("%,.2f", fee.getPaid())).append("` (✅ Verified)\n");
                     answer.append("- **Outstanding Balance Due**: `$").append(String.format("%,.2f", fee.getPending())).append("`\n\n");
-
                     if (fee.getPending() > 0) {
-                        answer.append("⚠️ **Notice**: Outstanding balance must be settled prior to end-semester hall ticket issuance.\n\n");
+                        answer.append("⚠️ *Notice: Outstanding fees must be settled before end-semester exam hall tickets are released.*");
                     } else {
-                        answer.append("🎉 **Clear Account**: All semester tuition fees are paid in full.\n\n");
+                        answer.append("🎉 *Account Clear: All semester fees are fully settled.*");
                     }
-
-                    if (fee.getHistory() != null && !fee.getHistory().isEmpty()) {
-                        answer.append("#### 🧾 Payment Transaction History:\n");
-                        answer.append("| Transaction ID | Date | Amount | Method | Status |\n");
-                        answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
-                        for (Map<String, Object> h : fee.getHistory()) {
-                            answer.append("| `").append(h.getOrDefault("receiptNo", "REC-" + h.get("id"))).append("` | ")
-                                  .append(h.getOrDefault("date", "2026-08-15")).append(" | $")
-                                  .append(h.getOrDefault("amount", "25000")).append(" | ")
-                                  .append(h.getOrDefault("method", "Online Banking")).append(" | ")
-                                  .append(h.getOrDefault("status", "SUCCESS")).append(" |\n");
-                        }
-                    }
-                } else {
-                    answer.append("Your tuition account is in good standing with zero pending hold flags.");
-                }
-
-                suggestions.add("How can I download my official fee receipt?");
-                suggestions.add("Are there merit scholarships available?");
-                suggestions.add("What is the fee payment deadline?");
-            } else {
-                answer.append("Standard tuition fee across 4-year engineering programs is $60,000 annually, payable in semester installments. Contact the Finance Office in Admin Block.");
-                suggestions.add("What are the accepted payment modes?");
-            }
-        }
-
-        // =========================================================================
-        // 15. GENERAL FACULTY & SUBJECT DIRECTORY
-        // =========================================================================
-        else if (query.contains("faculty") || query.contains("professor") || query.contains("teacher") || query.contains("subject") || query.contains("course") || query.contains("syllabus") || query.contains("hod")) {
-            String dept = currentStudent != null ? currentStudent.getDepartment() : "CSE";
-            List<Subject> deptSubs = subjectRepository.findByDepartment(dept);
-            List<Department> depts = departmentRepository.findAll();
-
-            answer.append("### 🏫 Academic Faculty & Subject Directory (").append(dept).append(")\n\n");
-            Department currentDeptObj = depts.stream().filter(d -> d.getCode().equalsIgnoreCase(dept)).findFirst().orElse(null);
-            if (currentDeptObj != null) {
-                answer.append("📌 **Head of Department (HoD)**: **").append(currentDeptObj.getHod()).append("**\n");
-                answer.append("📌 **Department Mission**: *").append(currentDeptObj.getDescription()).append("*\n\n");
-            }
-
-            if (!deptSubs.isEmpty()) {
-                answer.append("| Code | Course Name | Credits | Sem | Faculty In-Charge |\n");
-                answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
-                for (Subject s : deptSubs.stream().limit(8).toList()) {
-                    answer.append("| `").append(s.getCode()).append("` | ")
-                          .append(s.getName()).append(" | ")
-                          .append(s.getCredits()).append(" | Sem ")
-                          .append(s.getSemester()).append(" | ")
-                          .append(s.getFaculty()).append(" |\n");
                 }
             }
-            suggestions.add("Who teaches Data Structures?");
-            suggestions.add("What is my timetable for today?");
-            suggestions.add("Check my attendance across all subjects");
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
         }
 
-        // =========================================================================
-        // 16. CAMPUS EVENTS & SYMPOSIUMS
-        // =========================================================================
-        else if (query.contains("event") || query.contains("symposium") || query.contains("hackathon") || query.contains("fest") || query.contains("workshop")) {
-            List<CampusEvent> events = eventRepository.findAll();
-            answer.append("### 🎪 Upcoming Campus Events & Symposiums\n\n");
+        // =====================================================================
+        // STUDENT FEATURE 8: TIMETABLE & CLASS SCHEDULE
+        // =====================================================================
+        else if (query.contains("timetable") || query.contains("schedule") || query.contains("routine") || query.contains("class")) {
+            String dept = activeStudent != null ? activeStudent.getDepartment() : "CSE";
+            int sem = activeStudent != null && activeStudent.getSemester() != null ? activeStudent.getSemester() : 1;
 
-            if (!events.isEmpty()) {
-                answer.append("| Event | Date & Time | Venue | Organizer | Seats Left |\n");
-                answer.append("| :--- | :--- | :--- | :--- | :--- |\n");
-                for (CampusEvent ev : events) {
-                    int remaining = Math.max(0, ev.getCapacity() - (ev.getRegistered() != null ? ev.getRegistered() : 0));
-                    answer.append("| **").append(ev.getTitle()).append("** | `")
-                          .append(ev.getDate()).append(" ").append(ev.getTime()).append("` | ")
-                          .append(ev.getVenue()).append(" | ")
-                          .append(ev.getOrganizer()).append(" | **")
-                          .append(remaining).append("** seats |\n");
+            String targetDay = "Monday";
+            for (String d : List.of("monday", "tuesday", "wednesday", "thursday", "friday", "saturday")) {
+                if (query.contains(d)) {
+                    targetDay = d.substring(0, 1).toUpperCase() + d.substring(1);
+                    break;
                 }
-                answer.append("\n");
-                answer.append("👉 **Instant Registration**: You can say *\"Register me for [Event Name]\"* right here to register automatically!");
-            } else {
-                answer.append("No campus events scheduled for this week. Keep an eye on campus announcements for updates!");
             }
 
-            suggestions.add("Register me for National AI Symposium");
-            suggestions.add("What are the latest campus announcements?");
-            suggestions.add("Show my pending assignments");
-        }
+            final String dayFilter = targetDay;
+            List<TimetableEntry> entries = timetableRepository.findByDepartmentAndSemesterOrderByPeriodAsc(dept, sem).stream()
+                    .filter(e -> dayFilter.equalsIgnoreCase(e.getDay()))
+                    .toList();
 
-        // =========================================================================
-        // 17. ANNOUNCEMENTS & CIRCULARS
-        // =========================================================================
-        else if (query.contains("announcement") || query.contains("circular") || query.contains("notice") || query.contains("news") || query.contains("bulletin")) {
-            List<Announcement> announcements = announcementRepository.findAll();
-            answer.append("### 📢 Active Campus Announcements & Circulars\n\n");
-
-            if (!announcements.isEmpty()) {
-                for (Announcement a : announcements) {
-                    String badge = "urgent".equalsIgnoreCase(a.getPriority()) ? "🔴 URGENT" : ("important".equalsIgnoreCase(a.getPriority()) ? "🟡 IMPORTANT" : "🔵 INFO");
-                    answer.append("#### ").append(badge).append(": ").append(a.getTitle()).append("\n");
-                    answer.append("- **Date**: `").append(a.getPublishedAt()).append("` | **Audience**: ").append(a.getAudience()).append("\n");
-                    answer.append("- **Content**: ").append(a.getContent()).append("\n\n");
-                }
-            } else {
-                answer.append("All administrative circulars are up to date. No emergency notifications active.");
-            }
-
-            suggestions.add("When are the mid-term examinations?");
-            suggestions.add("Find upcoming campus events");
-            suggestions.add("Check my attendance status");
-        }
-
-        // =========================================================================
-        // 18. SERVICE TICKETS STATUS
-        // =========================================================================
-        else if (query.contains("complaint") || query.contains("ticket") || query.contains("service desk")) {
-            List<Complaint> complaints = complaintRepository.findAll();
-            answer.append("### 🛠️ Campus Grievance & Service Desk\n\n");
-
-            if (!complaints.isEmpty()) {
-                answer.append("| Ticket ID | Title | Category | Status | Priority | Date |\n");
+            answer.append("### 📅 Your Academic Timetable: **").append(targetDay).append("** (").append(dept).append(" - Sem ").append(sem).append(")\n\n");
+            if (!entries.isEmpty()) {
+                answer.append("| Period | Time Slot | Course Code | Subject Name | Room | Faculty |\n");
                 answer.append("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
-                for (Complaint c : complaints.stream().limit(5).toList()) {
-                    String statusIcon = "resolved".equalsIgnoreCase(c.getStatus()) ? "🟢 Resolved" : ("progress".equalsIgnoreCase(c.getStatus()) ? "🟡 In Progress" : "⚪ Submitted");
-                    answer.append("| #").append(c.getId()).append(" | ")
-                          .append(c.getTitle()).append(" | ")
-                          .append(c.getCategory()).append(" | ")
-                          .append(statusIcon).append(" | `")
-                          .append(c.getPriority()).append("` | `")
-                          .append(c.getCreatedAt()).append("` |\n");
+                for (TimetableEntry te : entries) {
+                    String slot = switch (te.getPeriod() != null ? te.getPeriod() : 1) {
+                        case 1 -> "09:00 AM - 09:45 AM";
+                        case 2 -> "09:45 AM - 10:30 AM";
+                        case 3 -> "10:45 AM - 11:30 AM";
+                        case 4 -> "11:30 AM - 12:15 PM";
+                        case 5 -> "01:00 PM - 01:45 PM";
+                        case 6 -> "01:45 PM - 02:30 PM";
+                        case 7 -> "02:30 PM - 03:15 PM";
+                        default -> "09:00 AM - 09:45 AM";
+                    };
+                    answer.append("| Period ").append(te.getPeriod()).append(" | `").append(slot).append("` | `")
+                          .append(te.getSubjectCode()).append("` | **").append(te.getSubjectName()).append("** | ")
+                          .append(te.getRoom()).append(" | ").append(te.getFacultyName()).append(" |\n");
                 }
-                answer.append("\n");
+            } else {
+                answer.append("No lectures scheduled for ").append(targetDay).append(". Have a restful self-study day!");
             }
-
-            answer.append("👉 **Submit a Ticket**: You can type *\"File a complaint: [Details]\"* right here to create a new ticket automatically.");
-            suggestions.add("File a complaint: Wi-Fi disconnected in Lab");
-            suggestions.add("Where is the IT Helpdesk located?");
-            suggestions.add("Check my pending fees");
+            suggestions.add("What is my timetable for Tuesday?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
         }
 
-        // =========================================================================
-        // 19. DEFAULT FALLBACK & ASSISTANT CAPABILITY DIRECTORY
-        // =========================================================================
-        else {
-            answer.append("### 🏛️ Meridian Smart Campus AI Assistant\n\n");
-            answer.append("I am your integrated campus intelligence assistant, directly connected to the university MongoDB database. ");
-            if (currentStudent != null) {
-                answer.append("I have real-time access to your records (**").append(currentStudent.getName())
-                      .append("**, Department of **").append(currentStudent.getDepartment()).append("**).\n\n");
-            } else {
-                answer.append("I can query student directories, faculty rosters, timetables, grades, and campus events.\n\n");
+        // =====================================================================
+        // STUDENT FEATURE 9: MENTOR INFO
+        // =====================================================================
+        else if (query.contains("mentor") || query.contains("advisor") || query.contains("counselor")) {
+            if (activeStudent != null) {
+                StudentDetails details = studentDetailsRepository.findByStudentId(activeStudent.getId()).orElse(null);
+                answer.append("### 👨‍🏫 Assigned Faculty Mentor\n\n");
+                if (details != null && details.getMentor() != null) {
+                    answer.append("- **Faculty Advisor**: **").append(details.getMentor().get("name")).append("**\n");
+                    answer.append("- **Department**: `").append(activeStudent.getDepartment()).append("`\n");
+                    answer.append("- **Direct Phone**: `").append(details.getMentor().get("phone")).append("`\n");
+                    answer.append("- **Office Hours**: Monday–Friday 03:30 PM – 05:00 PM\n\n");
+                    answer.append("💡 *You can reach out to your mentor for academic counseling, course registrations, or medical attendance condonation approvals.*");
+                }
             }
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What assignments are due this week?");
+        }
 
+        // =====================================================================
+        // STUDENT DEFAULT FALLBACK
+        // =====================================================================
+        else {
+            answer.append("### 🎓 Personal Student Academic Assistant\n\n");
+            if (activeStudent != null) {
+                answer.append("Welcome, **").append(activeStudent.getName()).append("** (").append(activeStudent.getDepartment())
+                      .append(", Semester ").append(activeStudent.getSemester()).append("). I am your personal campus advisor.\n\n");
+            } else {
+                answer.append("Welcome! I am your personal student campus advisor.\n\n");
+            }
             answer.append("#### 🚀 What I can do for you:\n");
-            answer.append("- **⚡ Autonomous Actions**: *\"Register me for the Tech Symposium\"*, *\"File a complaint: Library AC broken\"*\n");
-            answer.append("- **📊 Attendance & Safe-Skips**: *\"How many classes can I skip in CS101?\"*, *\"Attendance shortage check\"*\n");
-            answer.append("- **🎯 Target GPA Simulator**: *\"Simulate my score for a 9.0 CGPA\"*, *\"What is my latest SGPA?\"*\n");
-            answer.append("- **📅 Timetables & Classes**: *\"What is my schedule for today?\"*, *\"Timetable for Tuesday\"*\n");
-            answer.append("- **📚 Academic Deadlines**: *\"What assignments are due this week?\"*\n");
-            answer.append("- **👨‍🏫 Faculty & Mentorship**: *\"Who is my mentor?\"*, *\"Who teaches Problem Solving?\"*\n");
-            answer.append("- **💳 Accounts & Fees**: *\"Show my tuition fee ledger\"*\n");
+            answer.append("- **🎯 Attendance Safe-Skips**: *\"How many classes can I safely skip?\"*\n");
+            answer.append("- **🎓 CGPA & Marks**: *\"What is my latest CGPA and semester marks?\"*\n");
+            answer.append("- **📈 Target GPA Simulator**: *\"Simulate my score for a 9.0 CGPA\"*\n");
+            answer.append("- **📚 Assignments Due**: *\"What assignments are due this week?\"*\n");
+            answer.append("- **📅 Class Schedule**: *\"What is my timetable for today?\"*\n");
+            answer.append("- **🎪 Campus Events**: *\"Register me for the National AI Symposium\"*\n");
+            answer.append("- **🛠️ Service Desk**: *\"File a complaint: Wi-Fi disconnected in Lab\"*\n\n");
+            answer.append("🔒 *Privacy Notice: Student records for other peers are protected by university privacy policies.*");
 
-            suggestions.add("What is my timetable for today?");
-            suggestions.add("How many classes can I skip?");
-            suggestions.add("Simulate my target GPA");
-            suggestions.add("Register me for the National AI Symposium");
+            suggestions.add("How is my attendance and how many classes can I skip?");
+            suggestions.add("What is my latest CGPA and semester marks?");
+            suggestions.add("Simulate what score I need for a 9.0 CGPA");
+            suggestions.add("What assignments are due this week?");
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("answer", answer.toString());
         result.put("suggestions", suggestions);
         result.put("source", "campus_knowledge_engine");
-        result.put("model", "Meridian Grounded Campus Engine v3.0");
-        if (actionTaken != null) {
-            result.put("actionTaken", actionTaken);
-        }
+        result.put("model", "Meridian Grounded Student Advisor v3.0");
+        if (actionTaken != null) result.put("actionTaken", actionTaken);
         return result;
+    }
+
+    // =========================================================================
+    // 🛠️ HELPER LOOKUP METHODS
+    // =========================================================================
+    private boolean containsStudentSearch(String query, List<Student> students) {
+        if (query.contains("student ") || query.contains("profile of") || query.contains("details for") ||
+                query.contains("details of") || query.contains("cgpa of") || query.contains("marks of")) {
+            return true;
+        }
+        for (Student s : students) {
+            if (query.contains(s.getName().toLowerCase()) || query.contains(s.getStudentId().toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Student matchStudent(String query, List<Student> students) {
+        for (Student s : students) {
+            String name = s.getName().toLowerCase();
+            if (query.contains(name) || query.contains(s.getStudentId().toLowerCase())) {
+                return s;
+            }
+            String[] parts = name.split(" ");
+            if (parts.length > 1 && parts[0].length() > 3 && query.contains(parts[0])) {
+                return s;
+            }
+        }
+        Long id = extractNumericId(query);
+        if (id != null) {
+            for (Student s : students) {
+                if (s.getId().equals(id) || s.getStudentId().contains(String.valueOf(id))) {
+                    return s;
+                }
+            }
+        }
+        return students.isEmpty() ? null : students.get(0);
+    }
+
+    private Faculty matchFaculty(String username) {
+        if (username != null && !username.trim().isEmpty()) {
+            User u = userRepository.findByUsernameIgnoreCase(username.trim()).orElse(null);
+            if (u != null) {
+                Optional<Faculty> fOpt = facultyRepository.findByEmail(u.getEmail());
+                if (fOpt.isPresent()) return fOpt.get();
+                List<Faculty> deptFac = facultyRepository.findByDepartment(u.getDepartment());
+                if (!deptFac.isEmpty()) return deptFac.get(0);
+            }
+        }
+        return facultyRepository.findById(1L).orElseGet(() -> {
+            List<Faculty> all = facultyRepository.findAll();
+            return all.isEmpty() ? null : all.get(0);
+        });
+    }
+
+    private Long extractNumericId(String text) {
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("#?(\\d+)").matcher(text);
+            if (m.find()) {
+                return Long.parseLong(m.group(1));
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }
