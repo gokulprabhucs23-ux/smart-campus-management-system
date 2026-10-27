@@ -131,6 +131,7 @@ public class DatabaseSeeder implements CommandLineRunner {
                 // Save Faculty entity with phone number (1 subject handled)
                 Faculty facultyEntity = new Faculty(facultyIdCounter, "FAC" + (1000 + facultyIdCounter), ts.name(), ts.email(), deptCode, ts.designation(), ts.qualification(), "active", List.of(ts.code()));
                 facultyEntity.setPhone(ts.phone());
+                facultyEntity.setUsername(ts.username());
                 facultyRepository.save(facultyEntity);
 
                 // Save Subject entity with semester (1-8), year (1-4), and faculty details
@@ -206,13 +207,34 @@ public class DatabaseSeeder implements CommandLineRunner {
         long studentUserNumericId = 100L;
         long studentEntityIdCounter = 1L;
 
+        Map<String, Long> deptBaseFacultyId = Map.of(
+                "CSE", 0L,
+                "ECE", 40L,
+                "MECH", 80L,
+                "CIVIL", 120L,
+                "EEE", 160L
+        );
+
         for (StudentSpec st : studentList) {
             // Save student credentials (both studentXdept and userXdept aliases with password 123)
             userRepository.save(new User(studentUserNumericId, st.username(), "123", st.name(), st.username() + "@meridian.edu", "student", st.dept()));
             userRepository.save(new User(studentUserNumericId + 500, st.alias(), "123", st.name(), st.alias() + "@meridian.edu", "student", st.dept()));
 
-            // Save Student entity with semester and year
-            studentRepository.save(new Student(studentEntityIdCounter, st.studentId(), st.name(), st.username() + "@meridian.edu", st.dept(), st.year(), st.semester(), st.section(), "active", st.attendance(), 1L));
+            // Resolve assigned faculty mentor for this student's department and semester
+            Long mentorFacultyId = deptBaseFacultyId.getOrDefault(st.dept(), 0L) + (long) (st.semester() - 1) * 5 + 1;
+            Faculty mentorFaculty = facultyRepository.findById(mentorFacultyId).orElse(null);
+            String mentorName = mentorFaculty != null ? mentorFaculty.getName() : "Dr. Alan Turing";
+            String mentorEmail = mentorFaculty != null ? mentorFaculty.getEmail() : "teacher1cse@meridian.edu";
+            String mentorPhone = mentorFaculty != null ? mentorFaculty.getPhone() : "+1 (555) 011-2301";
+            String mentorDept = mentorFaculty != null ? mentorFaculty.getDepartment() : st.dept();
+            String mentorDesig = mentorFaculty != null ? mentorFaculty.getDesignation() : "Professor";
+            String mentorUsername = mentorFaculty != null && mentorFaculty.getUsername() != null ? mentorFaculty.getUsername() : "teacher" + mentorFacultyId + st.dept().toLowerCase();
+
+            // Save Student entity with semester, year, and assigned mentor
+            Student studentEntity = new Student(studentEntityIdCounter, st.studentId(), st.name(), st.username() + "@meridian.edu", st.dept(), st.year(), st.semester(), st.section(), "active", st.attendance(), mentorFacultyId);
+            studentEntity.setMentorName(mentorName);
+            studentEntity.setMentorEmail(mentorEmail);
+            studentRepository.save(studentEntity);
 
             // Generate realistic semesterPercentages, currentArrears, arrearsHistory for this student
             List<Map<String, Object>> semesterPercentages = new ArrayList<>();
@@ -280,7 +302,17 @@ public class DatabaseSeeder implements CommandLineRunner {
             details.setCurrentArrears(currentArrears);
             details.setArrearsHistory(arrearsHistory);
             details.setSemesterPercentages(semesterPercentages);
-            details.setMentor(Map.of("name", "Dr. Alan Turing", "phone", "+1 (555) 011-2301"));
+
+            Map<String, Object> mentorMap = new LinkedHashMap<>();
+            mentorMap.put("id", mentorFacultyId);
+            mentorMap.put("name", mentorName);
+            mentorMap.put("email", mentorEmail);
+            mentorMap.put("phone", mentorPhone);
+            mentorMap.put("department", mentorDept);
+            mentorMap.put("designation", mentorDesig);
+            mentorMap.put("username", mentorUsername);
+            details.setMentor(mentorMap);
+
             int annualFee = 15000;
             int paidFee = st.year() == 1 ? 10000 : (st.year() * 15000 - 10000);
             int pendingFee = st.year() == 1 ? 5000 : 10000;
@@ -485,24 +517,48 @@ public class DatabaseSeeder implements CommandLineRunner {
                 1L, "student", "student1cse", "John Doe", "CSE", "S1001",
                 "Medical Leave", "2026-10-02", "2026-10-04", 3,
                 "Viral fever and physician-advised rest. Medical prescription submitted.",
-                "faculty", "teacher1cse", "Dr. Alan Turing",
+                "faculty", "teacher1cse", "Dr. Alan Turing (Mentor)",
                 null, "APPROVED", "Dr. Alan Turing",
                 "Approved on medical grounds. Please catch up on CS101 lab exercises.",
                 "2026-10-02 11:30", "2026-10-01 18:20"
         ));
 
+        // Pending Leave for student6cse -> Assigned strictly to mentor teacher26cse (Dr. Marvin Minsky)
         leaveRequestRepository.save(new LeaveRequest(
                 2L, "student", "student6cse", "Alex Morgan", "CSE", "S1006",
-                "Academic / Hackathon Duty", "2026-10-14", "2026-10-16", 3,
-                "Representing Meridian University at the National AI & Security Hackathon 2026.",
-                "faculty", "teacher26cse", "Dr. Marvin Minsky",
+                "Academic / Hackathon Duty", "2026-11-05", "2026-11-07", 3,
+                "Representing Meridian University at the National AI & Security Hackathon 2026 in Bangalore.",
+                "faculty", "teacher26cse", "Dr. Marvin Minsky (Mentor)",
+                null, "PENDING", null,
+                null,
+                null, "2026-10-27 14:15"
+        ));
+
+        // Past Approved Leave for student6cse
+        leaveRequestRepository.save(new LeaveRequest(
+                3L, "student", "student6cse", "Alex Morgan", "CSE", "S1006",
+                "On-Duty / Conference", "2026-10-14", "2026-10-16", 3,
+                "Presented research poster on Distributed Graph Neural Networks at IEEE Student Chapter.",
+                "faculty", "teacher26cse", "Dr. Marvin Minsky (Mentor)",
                 null, "APPROVED", "Dr. Marvin Minsky",
-                "Approved. Best of luck at the hackathon competition.",
+                "Approved. Outstanding performance representing our CSE department.",
                 "2026-10-09 10:00", "2026-10-08 09:15"
         ));
 
+        // Pending Leave for student1cse -> Assigned strictly to mentor teacher1cse (Dr. Alan Turing)
         leaveRequestRepository.save(new LeaveRequest(
-                3L, "faculty", "teacher1cse", "Dr. Alan Turing", "CSE", null,
+                4L, "student", "student1cse", "John Doe", "CSE", "S1001",
+                "Casual Leave", "2026-11-02", "2026-11-03", 2,
+                "Attending family wedding ceremony out of state.",
+                "faculty", "teacher1cse", "Dr. Alan Turing (Mentor)",
+                null, "PENDING", null,
+                null,
+                null, "2026-10-27 09:30"
+        ));
+
+        // Faculty Leave for teacher1cse -> Assigned to admin
+        leaveRequestRepository.save(new LeaveRequest(
+                5L, "faculty", "teacher1cse", "Dr. Alan Turing", "CSE", null,
                 "Academic Duty / Keynote", "2026-10-21", "2026-10-24", 4,
                 "Keynote address at International Symposium on Machine Intelligence.",
                 "admin", "admin", "Campus Administrator",

@@ -61,6 +61,7 @@ import {
   Upload,
   UserRound,
   Users,
+  Users2,
   X,
 } from "lucide-react";
 import {
@@ -115,132 +116,527 @@ import { StudentLeaveRequests } from "@/components/leaves/StudentLeaveRequests";
 import { TeacherLeaveRequests } from "@/components/leaves/TeacherLeaveRequests";
 import { LeaveApprovals } from "@/components/leaves/LeaveApprovals";
 
-function StudentProfileModal({ student, onClose }) {
+function ChangeMentorModal({ student, onClose }) {
+  const qc = useQueryClient();
+  const { data: facultyList = [], isLoading } = useListFaculty();
+  const [selectedFacultyId, setSelectedFacultyId] = useState(student.mentorId || 1);
+  const [deptFilter, setDeptFilter] = useState(student.department || "all");
+  const [facultySearch, setFacultySearch] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const filteredFaculty = useMemo(() => {
+    return facultyList.filter((f) => {
+      const matchDept = deptFilter === "all" || f.department?.toLowerCase() === deptFilter?.toLowerCase();
+      const matchSearch = !facultySearch ||
+        f.name?.toLowerCase().includes(facultySearch.toLowerCase()) ||
+        f.email?.toLowerCase().includes(facultySearch.toLowerCase()) ||
+        f.designation?.toLowerCase().includes(facultySearch.toLowerCase());
+      return matchDept && matchSearch;
+    });
+  }, [facultyList, deptFilter, facultySearch]);
+
+  const handleAssign = async () => {
+    if (!selectedFacultyId) return;
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      await customFetch(`/api/students/${student.id}/mentor`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mentorId: Number(selectedFacultyId) }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/students"] });
+      qc.invalidateQueries({ queryKey: ["studentDetails", student.id] });
+      qc.invalidateQueries({ queryKey: ["/api/leaves"] });
+      onClose();
+    } catch (err) {
+      setErrorMsg(err?.data?.error || err?.message || "Failed to assign mentor.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const selectedFaculty = facultyList.find((f) => String(f.id) === String(selectedFacultyId));
+
+  return (
+    <Modal title="Map Faculty Mentor" onClose={onClose}>
+      <div className="space-y-4">
+        {/* Student Summary Card */}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs">
+          <div className="font-semibold text-sm text-foreground">{student.name}</div>
+          <div className="text-muted-foreground mt-0.5">
+            Student ID: <span className="font-mono text-foreground font-semibold">{student.studentId}</span> · Department: <span className="font-semibold text-primary">{student.department}</span> · Year {student.year} · Section {student.section}
+          </div>
+          <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <span>Currently Assigned Mentor:</span>
+            <span className="font-semibold text-foreground bg-muted px-2 py-0.5 rounded border border-border">
+              {student.mentorName || "Dr. Alan Turing"}
+            </span>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Filter and Search */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Filter by Department
+            </label>
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs"
+            >
+              <option value="all">All Departments ({facultyList.length} faculty)</option>
+              <option value="CSE">Computer Science (CSE)</option>
+              <option value="ECE">Electronics (ECE)</option>
+              <option value="MECH">Mechanical (MECH)</option>
+              <option value="CIVIL">Civil Engineering (CIVIL)</option>
+              <option value="EEE">Electrical & Electronics (EEE)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Search Faculty Member
+            </label>
+            <input
+              type="text"
+              placeholder="Search by professor name..."
+              value={facultySearch}
+              onChange={(e) => setFacultySearch(e.target.value)}
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Faculty Select List */}
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+            Select Faculty Mentor ({filteredFaculty.length} professors available)
+          </label>
+          {isLoading ? (
+            <SkeletonRows count={3} />
+          ) : (
+            <div className="max-h-56 overflow-y-auto rounded-xl border border-border divide-y divide-border bg-background">
+              {filteredFaculty.map((f) => {
+                const isSelected = String(f.id) === String(selectedFacultyId);
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => setSelectedFacultyId(f.id)}
+                    className={`p-3 cursor-pointer text-xs transition-colors flex items-center justify-between ${
+                      isSelected
+                        ? "bg-primary/10 border-l-4 border-l-primary font-medium"
+                        : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold text-foreground flex items-center gap-2">
+                        {f.name}
+                        <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground font-mono">
+                          {f.department}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {f.designation} · {f.email}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Check className="size-4 text-primary shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Selected Summary Callout */}
+        {selectedFaculty && (
+          <div className="rounded-lg bg-muted/60 p-3 text-xs flex items-center gap-3 border border-border">
+            <GraduationCap className="size-5 text-primary shrink-0" />
+            <div>
+              <span className="text-muted-foreground">New Mentor to Assign: </span>
+              <strong className="text-foreground">{selectedFaculty.name}</strong> ({selectedFaculty.designation}, {selectedFaculty.department})
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-input px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleAssign}
+            disabled={submitting || !selectedFacultyId}
+            className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            data-testid="button-confirm-assign-mentor"
+          >
+            {submitting ? "Assigning..." : "Confirm & Save Mentor"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function StudentProfileModal({ student, onClose, onOpenChangeMentor }) {
+  const me = useGetMe();
+  const role = me.data?.role || "student";
+  const isTeacher = role === "faculty";
+  const isAdmin = role === "admin";
+  const qc = useQueryClient();
+  const [actionRemarks, setActionRemarks] = useState("Approved by assigned mentor.");
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [actionMsg, setActionMsg] = useState("");
+
   const { data: details, isLoading } = useQuery({
     queryKey: ["studentDetails", student.id],
     queryFn: () => customFetch(`/api/students/${student.id}/details`),
   });
 
+  const handleLeaveDecision = async (leaveId, decision) => {
+    setActionLoadingId(leaveId);
+    setActionMsg("");
+    try {
+      await customFetch(`/api/leaves/${leaveId}/${decision}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          remarks: actionRemarks || (decision === "approve" ? "Approved by assigned mentor." : "Declined by mentor."),
+        }),
+      });
+      qc.invalidateQueries({ queryKey: ["studentDetails", student.id] });
+      qc.invalidateQueries({ queryKey: ["/api/leaves"] });
+      setActionMsg(`Leave #${leaveId} successfully ${decision === "approve" ? "APPROVED" : "DECLINED"}.`);
+    } catch (err) {
+      setActionMsg(err?.data?.error || err?.message || "Failed to update leave.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   return (
-    <Modal title="Student Profile" onClose={onClose}>
-      <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
-        <div className="flex items-start gap-4">
-          <div className="grid size-12 place-items-center rounded-full bg-primary/20 text-lg font-bold text-primary">
-            {student.name
-              .split(" ")
-              .map((x) => x[0])
-              .join("")
-              .slice(0, 2)}
+    <Modal title={isTeacher ? "Mentee Academic Dossier" : "Student Profile"} onClose={onClose}>
+      <div className="space-y-6 max-h-[78vh] overflow-y-auto pr-2">
+        {/* Header Profile Info */}
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4 border-b border-border pb-4">
+          <div className="flex items-start gap-4">
+            <div className="grid size-14 place-items-center rounded-2xl bg-primary/20 text-xl font-bold text-primary shadow-sm shrink-0">
+              {student.name
+                .split(" ")
+                .map((x) => x[0])
+                .join("")
+                .slice(0, 2)}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="display text-xl font-bold text-foreground">{student.name}</h3>
+                {isTeacher && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-500/20">
+                    <GraduationCap className="size-3" /> Your Mentee
+                  </span>
+                )}
+                <span className="rounded bg-muted px-2 py-0.5 text-xs font-mono font-semibold text-muted-foreground">
+                  {student.studentId}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {student.email} · {student.department} Department · Year {student.year} · Semester {student.semester || (student.year * 2 - 1)} · Section {student.section}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="display text-xl font-semibold">{student.name}</h3>
-            <p className="text-sm text-muted-foreground">
-              {student.studentId} · {student.email}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {student.department} · Year {student.year} · Section{" "}
-              {student.section}
-            </p>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              student.status === "active"
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                : "bg-muted text-muted-foreground"
+            }`}>
+              {student.status?.toUpperCase() || "ACTIVE"}
+            </span>
+            {isAdmin && onOpenChangeMentor && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenChangeMentor(student);
+                }}
+                className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+              >
+                Change Mentor
+              </button>
+            )}
           </div>
         </div>
+
+        {actionMsg && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs font-medium text-foreground flex items-center gap-2">
+            <Info className="size-4 text-primary shrink-0" />
+            <span>{actionMsg}</span>
+          </div>
+        )}
 
         {isLoading ? (
           <SkeletonRows count={5} />
         ) : (
           <>
+            {/* Mentor Details Card */}
             {details?.mentor && (
-              <div className="rounded-lg bg-accent/20 p-4 border border-accent/30">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mentorship
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                    <GraduationCap className="size-3.5" />
+                    Assigned Faculty Mentor
+                  </div>
+                  {isAdmin && onOpenChangeMentor && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenChangeMentor(student);
+                      }}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      Reassign Mentor
+                    </button>
+                  )}
                 </div>
-                <div className="mt-2 text-sm font-medium">
-                  {details.mentor.name}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {details.mentor.phone}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-bold text-foreground">
+                      {details.mentor.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {details.mentor.designation || "Professor"} · {details.mentor.department || student.department} Department
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex flex-col sm:items-end">
+                    <span>Email: <strong className="text-foreground">{details.mentor.email || "mentor@meridian.edu"}</strong></span>
+                    <span>Contact: <strong className="text-foreground">{details.mentor.phone || "+1 (555) 011-2301"}</strong></span>
+                  </div>
                 </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-muted p-4">
-                <div className="text-xs text-muted-foreground">CGPA</div>
-                <div className="mt-1 text-2xl font-semibold">
-                  {details?.cgpa || student.average || "N/A"}
+            {/* Academic Summary KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase">CGPA</div>
+                <div className="mt-1 text-2xl font-bold text-foreground">
+                  {details?.cgpa || student.average || "8.50"}
+                </div>
+                <div className="mt-0.5 text-[10px] text-emerald-600 font-semibold">First Class with Distinction</div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase">Attendance</div>
+                <div className="mt-1 text-2xl font-bold text-foreground">
+                  {student.attendance}%
+                </div>
+                <div className={`mt-0.5 text-[10px] font-semibold ${
+                  student.attendance >= 75 ? "text-emerald-600" : "text-rose-600"
+                }`}>
+                  {student.attendance >= 75 ? "Eligible for exams" : "Below 75% threshold"}
                 </div>
               </div>
-              <div className="rounded-lg bg-muted p-4">
-                <div className="text-xs text-muted-foreground">Attendance</div>
-                <div className="mt-1 text-2xl font-semibold">
-                  {student.attendance}%
+
+              <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase">Active Arrears</div>
+                <div className="mt-1 text-2xl font-bold text-foreground">
+                  {details?.arrearCount || 0}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  {details?.arrearCount === 0 ? "No active backlogs" : "Requires remedial attention"}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase">Tuition Fees</div>
+                <div className="mt-1 text-2xl font-bold text-emerald-600">
+                  ${details?.fees?.paid || 15000}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  Pending: <strong className="text-rose-500">${details?.fees?.pending || 0}</strong>
                 </div>
               </div>
             </div>
 
+            {/* Semester-wise SGPA Progression */}
             {(details?.sgpa || []).length > 0 && (
-              <div>
-                <h4 className="mb-3 font-semibold">Semester GPA (SGPA)</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-xl border border-border p-4 bg-muted/20">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <Award className="size-3.5 text-primary" />
+                  Semester Grade Point Averages (SGPA Progression)
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {details.sgpa.map((s, i) => (
                     <div
                       key={i}
-                      className="rounded border border-border p-3 text-center"
+                      className="rounded-lg border border-border bg-background p-2.5 text-center shadow-xs"
                     >
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase">
                         Sem {s.sem}
                       </div>
-                      <div className="font-semibold">{s.gpa}</div>
+                      <div className="mt-1 text-base font-bold text-foreground">{s.gpa}</div>
+                      {s.cgpa && (
+                        <div className="text-[10px] text-muted-foreground">CGPA: {s.cgpa}</div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Leave Applications & Approvals (Mentor Authority) */}
             <div>
-              <h4 className="mb-3 font-semibold flex items-center gap-2">
-                Arrears History
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                  {details?.arrearCount || 0} active
-                </span>
-              </h4>
-              {(details?.arrearsHistory || []).length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  No arrears history.
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
+                  <CalendarCheck className="size-4 text-primary" />
+                  Mentee Leave Requests & History
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground font-mono">
+                    {(details?.leaves || []).length} applications
+                  </span>
+                </h4>
+                {isTeacher && (
+                  <span className="text-xs text-primary font-medium">
+                    You have direct approval authority for this mentee
+                  </span>
+                )}
+              </div>
+
+              {(details?.leaves || []).length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                  No leave requests submitted by this student yet.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {details.arrearsHistory.map((a, i) => (
+                <div className="space-y-3">
+                  {details.leaves.map((l) => (
                     <div
-                      key={i}
-                      className="flex justify-between rounded-lg border border-border p-3 text-sm"
+                      key={l.id}
+                      className="rounded-xl border border-border p-4 text-xs space-y-2.5 bg-card/60 shadow-xs"
                     >
-                      <span>{a.subject}</span>
-                      <span className="text-muted-foreground">Sem {a.sem}</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-foreground">{l.leaveType}</span>
+                          <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground font-mono">
+                            #{l.id}
+                          </span>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                          l.status === "APPROVED"
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                            : l.status === "REJECTED"
+                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
+                            : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                        }`}>
+                          {l.status === "PENDING" ? "⏳ Awaiting Your Review" : l.status}
+                        </span>
+                      </div>
+
+                      <div className="text-muted-foreground text-xs flex flex-wrap gap-x-4 gap-y-1">
+                        <span>Period: <strong className="text-foreground">{l.startDate}</strong> to <strong className="text-foreground">{l.endDate}</strong> ({l.totalDays} {l.totalDays === 1 ? "day" : "days"})</span>
+                        {l.createdAt && <span>Applied: {l.createdAt}</span>}
+                      </div>
+
+                      <p className="text-xs text-foreground/90 bg-muted/30 p-2.5 rounded-lg border border-border/50">
+                        <strong className="text-foreground/70">Reason: </strong>{l.reason}
+                      </p>
+
+                      {l.reviewerRemarks && (
+                        <div className="text-xs rounded-lg p-2.5 border bg-accent/20 border-accent/30 text-accent-foreground">
+                          <strong>Remarks ({l.reviewedBy || "Reviewer"}): </strong>
+                          <span>{l.reviewerRemarks}</span>
+                          {l.reviewedAt && <span className="block mt-0.5 text-[10px] opacity-75">Decided on {l.reviewedAt}</span>}
+                        </div>
+                      )}
+
+                      {/* Mentor Decision Buttons for Pending Leaves */}
+                      {l.status === "PENDING" && (isTeacher || isAdmin) && (
+                        <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-border">
+                          <input
+                            type="text"
+                            placeholder="Approval remarks (optional)..."
+                            value={actionRemarks}
+                            onChange={(e) => setActionRemarks(e.target.value)}
+                            className="h-8 flex-1 min-w-[200px] rounded-lg border border-input bg-background px-2.5 text-xs"
+                          />
+                          <button
+                            type="button"
+                            disabled={actionLoadingId === l.id}
+                            onClick={() => handleLeaveDecision(l.id, "approve")}
+                            className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            ✓ Approve Leave
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionLoadingId === l.id}
+                            onClick={() => handleLeaveDecision(l.id, "reject")}
+                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
+                          >
+                            ✕ Decline
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {details?.fees && (
-              <div>
-                <h4 className="mb-3 font-semibold">Fee Status</h4>
-                <div className="flex gap-4">
-                  <div className="flex-1 rounded border border-border p-3">
-                    <div className="text-xs text-muted-foreground">Paid</div>
-                    <div className="font-semibold text-emerald-600">
-                      ${details.fees.paid}
-                    </div>
-                  </div>
-                  <div className="flex-1 rounded border border-border p-3">
-                    <div className="text-xs text-muted-foreground">Pending</div>
-                    <div className="font-semibold text-rose-600">
-                      ${details.fees.pending}
-                    </div>
-                  </div>
+            {/* Arrears History */}
+            <div>
+              <h4 className="mb-3 font-semibold text-sm flex items-center gap-2 text-foreground">
+                Arrears & Academic Backlogs
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground font-mono">
+                  {details?.arrearCount || 0} active
+                </span>
+              </h4>
+              {(details?.arrearsHistory || []).length === 0 && (details?.currentArrears || []).length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  Clean academic record. No active or past arrears.
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="space-y-2">
+                  {(details?.currentArrears || []).map((a, i) => (
+                    <div
+                      key={`curr-${i}`}
+                      className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs"
+                    >
+                      <div>
+                        <span className="font-semibold text-rose-700 dark:text-rose-300">{a.subjectCode} - {a.subjectName}</span>
+                        <span className="ml-2 text-[10px] text-muted-foreground">Semester {a.semester} Backlog</span>
+                      </div>
+                      <span className="rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-[10px] font-bold">
+                        Active Backlog
+                      </span>
+                    </div>
+                  ))}
+                  {(details?.arrearsHistory || []).map((a, i) => (
+                    <div
+                      key={`hist-${i}`}
+                      className="flex items-center justify-between rounded-lg border border-border p-3 text-xs"
+                    >
+                      <span>{a.subjectCode || a.subject} - {a.subjectName || "Core Course"}</span>
+                      <span className="text-emerald-600 font-semibold">Cleared (Sem {a.clearedSemester || a.sem})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -255,8 +651,13 @@ const getNavGroups = (role) => {
       label: "Workspace",
       items: [
         ["Dashboard", "/dashboard", LayoutDashboard],
-        ...(role === "admin" || role === "faculty"
-          ? [["Students", "/students", Users]]
+        ...(role === "faculty"
+          ? [
+              ["My Mentees", "/mentees", Users2],
+              ["Students Directory", "/students", Users],
+            ]
+          : role === "admin"
+          ? [["Students & Mentors", "/students", Users]]
           : []),
         ...(role === "admin"
           ? [
@@ -298,10 +699,10 @@ const getNavGroups = (role) => {
     ...(role === "faculty"
       ? [
           {
-            label: "Leave & Approvals",
+            label: "Mentorship & Leaves",
             items: [
-              ["My Leave Requests", "/my-leave-requests", CalendarClock],
-              ["Student Leave Approvals", "/leave-approvals", CheckSquare],
+              ["Mentee Leave Approvals", "/leave-approvals", CheckSquare],
+              ["My Faculty Leave", "/my-leave-requests", CalendarClock],
             ],
           },
         ]
@@ -1402,18 +1803,40 @@ function DashboardRouter() {
 }
 
 function Students() {
+  const [location] = useLocation();
   const me = useGetMe();
+  const isTeacher = me.data?.role === "faculty";
   const isAdmin = me.data?.role === "admin";
+  const isMenteesRoute = location === "/mentees";
+
+  const [facultyScope, setFacultyScope] = useState(isMenteesRoute || isTeacher ? "mentees" : "all");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const q = useListStudents(search ? { search } : undefined);
+  const [mentorModalStudent, setMentorModalStudent] = useState(null);
+
+  // Sync route
+  useEffect(() => {
+    if (location === "/mentees") {
+      setFacultyScope("mentees");
+    }
+  }, [location]);
+
+  const queryParams = useMemo(() => {
+    const p = {};
+    if (search && search.trim()) p.search = search.trim();
+    if (isTeacher) p.scope = facultyScope;
+    return Object.keys(p).length > 0 ? p : undefined;
+  }, [search, isTeacher, facultyScope]);
+
+  const q = useListStudents(queryParams);
   const qc = useQueryClient();
   const create = useCreateStudent();
   const update = useUpdateStudent();
   const remove = useDeleteStudent();
   const list = q.data ?? [];
+
   const submit = (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -1443,9 +1866,7 @@ function Students() {
         {
           onSuccess: () => {
             qc.invalidateQueries({
-              queryKey: getListStudentsQueryKey(
-                search ? { search } : undefined,
-              ),
+              queryKey: getListStudentsQueryKey(queryParams),
             });
             setModal(false);
           },
@@ -1457,21 +1878,38 @@ function Students() {
         {
           onSuccess: () => {
             qc.invalidateQueries({
-              queryKey: getListStudentsQueryKey(
-                search ? { search } : undefined,
-              ),
+              queryKey: getListStudentsQueryKey(queryParams),
             });
             setModal(false);
           },
         },
       );
   };
+
   return (
     <>
       <PageHead
-        eyebrow="Directory"
-        title="Students"
-        description="Search, review, and maintain the student register."
+        eyebrow={
+          isTeacher && facultyScope === "mentees"
+            ? "Faculty Mentorship Console"
+            : isAdmin
+            ? "Administrative Oversight"
+            : "Directory"
+        }
+        title={
+          isTeacher && facultyScope === "mentees"
+            ? "My Assigned Mentees"
+            : isAdmin
+            ? "Students & Mentorship Register"
+            : "Students"
+        }
+        description={
+          isTeacher && facultyScope === "mentees"
+            ? "Review and support students assigned under your academic mentorship. You have exclusive authority to approve leave requests and monitor academic progress."
+            : isAdmin
+            ? "Search students, review academic standing, and map or change faculty mentors."
+            : "Search, review, and maintain the campus student register."
+        }
         action={
           isAdmin && (
             <button
@@ -1479,7 +1917,7 @@ function Students() {
                 setEditing(null);
                 setModal(true);
               }}
-              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
               data-testid="button-create-student"
             >
               <Plus className="mr-2 inline size-4" /> Add student
@@ -1487,27 +1925,80 @@ function Students() {
           )
         }
       />
+
       <Card>
-        <div className="flex flex-col justify-between gap-3 border-b border-border p-4 sm:flex-row sm:items-center">
-          <div className="text-sm font-semibold">
-            {list.length} registered students
+        {/* Top Control Bar with Scope Toggle for Faculty */}
+        <div className="flex flex-col justify-between gap-3 border-b border-border p-4 sm:flex-row sm:items-center bg-muted/10">
+          <div className="flex flex-wrap items-center gap-3">
+            {isTeacher && (
+              <div className="flex items-center gap-1 rounded-xl bg-muted p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setFacultyScope("mentees")}
+                  className={`rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5 ${
+                    facultyScope === "mentees"
+                      ? "bg-background text-foreground font-bold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid="tab-my-mentees"
+                >
+                  <GraduationCap className="size-3.5 text-primary" />
+                  <span>My Mentees</span>
+                  <span className="rounded-full bg-primary/15 text-primary px-1.5 py-0.2 text-[10px]">
+                    {list.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFacultyScope("all")}
+                  className={`rounded-lg px-3 py-1.5 transition-all flex items-center gap-1.5 ${
+                    facultyScope === "all"
+                      ? "bg-background text-foreground font-bold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid="tab-all-students"
+                >
+                  <Users className="size-3.5" />
+                  <span>All Campus Students</span>
+                </button>
+              </div>
+            )}
+            <div className="text-xs font-semibold text-muted-foreground">
+              {list.length} {isTeacher && facultyScope === "mentees" ? "mentees assigned" : "registered students"}
+            </div>
           </div>
+
           <SearchBox
             value={search}
             onChange={setSearch}
-            placeholder="Search by name or ID"
+            placeholder={
+              isTeacher && facultyScope === "mentees"
+                ? "Search your mentees..."
+                : "Search by student name, ID, or mentor..."
+            }
           />
         </div>
+
         {q.isLoading ? (
-          <div className="p-4">
-            <SkeletonRows />
+          <div className="p-6">
+            <SkeletonRows count={5} />
           </div>
         ) : q.isError ? (
-          <div className="p-4">
+          <div className="p-6">
             <ErrorState retry={() => q.refetch()} />
           </div>
         ) : list.length === 0 ? (
-          <Empty label="students" />
+          <div className="p-12 text-center">
+            <GraduationCap className="mx-auto size-10 text-muted-foreground opacity-50" />
+            <h4 className="mt-2 text-sm font-semibold text-foreground">
+              {isTeacher && facultyScope === "mentees" ? "No Mentees Assigned Yet" : "No students found"}
+            </h4>
+            <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+              {isTeacher && facultyScope === "mentees"
+                ? "The campus administration has not mapped any students to your profile yet, or none match your search."
+                : "Try adjusting your search criteria or filter options."}
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -1515,8 +2006,9 @@ function Students() {
                 <tr>
                   <th className="px-5 py-3">Student</th>
                   <th className="px-5 py-3">Department</th>
-                  <th className="px-5 py-3">Year</th>
+                  <th className="px-5 py-3">Year & Sem</th>
                   <th className="px-5 py-3">Attendance</th>
+                  <th className="px-5 py-3">Assigned Faculty Mentor</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
@@ -1529,23 +2021,60 @@ function Students() {
                     data-testid={`row-student-${s.id}`}
                   >
                     <td className="px-5 py-4">
-                      <div className="font-semibold">{s.name}</div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
+                      <div className="font-semibold text-foreground">{s.name}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground font-mono">
                         {s.studentId} · {s.email}
                       </div>
                     </td>
-                    <td className="px-5 py-4">{s.department}</td>
                     <td className="px-5 py-4">
-                      {s.year} · {s.section}
+                      <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs font-semibold">
+                        {s.department}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-foreground/80">
+                      <div>Year {s.year} · Sec {s.section}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Semester {s.semester || (s.year * 2 - 1)}
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <div className="w-24">
-                        <div className="mb-1 text-xs font-semibold">
-                          {s.attendance}%
+                        <div className="mb-1 text-xs font-semibold flex items-center justify-between">
+                          <span>{s.attendance}%</span>
+                          {s.attendance < 75 && (
+                            <span className="text-[10px] text-rose-500 font-bold">Low</span>
+                          )}
                         </div>
                         <div className="metric-bar">
-                          <span style={{ width: `${s.attendance}%` }} />
+                          <span
+                            style={{ width: `${s.attendance}%` }}
+                            className={s.attendance < 75 ? "bg-rose-500" : undefined}
+                          />
                         </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-between gap-2 max-w-[220px]">
+                        <div>
+                          <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                            <GraduationCap className="size-3.5 text-primary shrink-0" />
+                            <span className="truncate">{s.mentorName || "Dr. Alan Turing"}</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {s.mentorEmail || `${s.department} Faculty`}
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setMentorModalStudent(s)}
+                            className="rounded-lg border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all shrink-0 ml-1"
+                            title="Change or map assigned mentor"
+                            data-testid={`button-map-mentor-${s.id}`}
+                          >
+                            Map
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -1558,37 +2087,44 @@ function Students() {
                     <td className="px-5 py-4 text-right">
                       <button
                         onClick={() => setViewing(s)}
-                        className="mr-3 text-xs font-semibold text-primary"
+                        className="mr-3 text-xs font-semibold text-primary hover:underline"
                         data-testid={`button-view-student-${s.id}`}
                       >
-                        View Details
+                        {isTeacher && facultyScope === "mentees" ? "Mentee Dossier" : "View Details"}
                       </button>
                       {isAdmin && (
                         <>
+                          <button
+                            onClick={() => setMentorModalStudent(s)}
+                            className="mr-3 text-xs font-semibold text-blue-600 hover:underline"
+                            data-testid={`button-reassign-mentor-${s.id}`}
+                          >
+                            Change Mentor
+                          </button>
                           <button
                             onClick={() => {
                               setEditing(s);
                               setModal(true);
                             }}
-                            className="mr-3 text-xs font-semibold text-primary"
+                            className="mr-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             data-testid={`button-edit-student-${s.id}`}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm(`Delete ${s.name}?`))
+                              if (confirm(`Delete student record for ${s.name}?`))
                                 remove.mutate(
                                   { id: s.id },
                                   {
                                     onSuccess: () =>
                                       qc.invalidateQueries({
-                                        queryKey: getListStudentsQueryKey(),
+                                        queryKey: getListStudentsQueryKey(queryParams),
                                       }),
                                   },
                                 );
                             }}
-                            className="text-xs font-semibold text-destructive"
+                            className="text-xs font-semibold text-destructive hover:underline"
                             data-testid={`button-delete-student-${s.id}`}
                           >
                             Delete
@@ -1603,6 +2139,7 @@ function Students() {
           </div>
         )}
       </Card>
+
       {modal && (
         <Modal
           title={editing ? "Edit student" : "Add student"}
@@ -1667,10 +2204,19 @@ function Students() {
           </form>
         </Modal>
       )}
+
       {viewing && (
         <StudentProfileModal
           student={viewing}
           onClose={() => setViewing(null)}
+          onOpenChangeMentor={(st) => setMentorModalStudent(st)}
+        />
+      )}
+
+      {mentorModalStudent && (
+        <ChangeMentorModal
+          student={mentorModalStudent}
+          onClose={() => setMentorModalStudent(null)}
         />
       )}
     </>
@@ -7781,6 +8327,7 @@ function Router() {
               <Switch>
                 <Route path="/dashboard" component={DashboardRouter} />
                 <Route path="/students" component={Students} />
+                <Route path="/mentees" component={Students} />
                 <Route path="/faculty" component={Faculty} />
                 <Route path="/departments" component={Departments} />
                 <Route path="/subjects" component={Subjects} />

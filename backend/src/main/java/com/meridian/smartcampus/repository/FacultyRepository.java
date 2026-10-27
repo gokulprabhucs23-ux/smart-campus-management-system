@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface FacultyRepository extends MongoRepository<Faculty, String> {
     Optional<Faculty> findById(Long id);
+    Optional<Faculty> findByUsername(String username);
     Optional<Faculty> findByEmail(String email);
     List<Faculty> findByNameContainingIgnoreCase(String search);
     List<Faculty> findByDepartment(String department);

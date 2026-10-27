@@ -35,8 +35,8 @@ export function LeaveApprovals() {
   // For Admin: toggle between Faculty Leave Approvals and Student Leaves Oversight
   const [adminSection, setAdminSection] = useState("faculty"); // "faculty" | "student"
 
-  // Fetch all leaves to filter dynamically
-  const { data: allLeaves = [], isLoading, isError, refetch } = useListLeaves();
+  // Fetch approvals scoped to current user role and mentor assignments
+  const { data: allLeaves = [], isLoading, isError, refetch } = useListLeaves({ scope: "approvals" });
 
   const approveMutation = useApproveLeave();
   const rejectMutation = useRejectLeave();
@@ -44,21 +44,26 @@ export function LeaveApprovals() {
   const [activeTab, setActiveTab] = useState("pending");
   const [search, setSearch] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [toastIsError, setToastIsError] = useState(false);
 
   // Action Modals State
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [actionType, setActionType] = useState(null); // "approve" | "reject"
   const [actionRemarks, setActionRemarks] = useState("");
 
-  const showToast = (msg) => {
+  const showToast = (msg, isErr = false) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 4000);
+    setToastIsError(isErr);
+    setTimeout(() => {
+      setToastMessage("");
+      setToastIsError(false);
+    }, 4500);
   };
 
   // Determine current dataset based on viewer role
   const targetLeaves = useMemo(() => {
     if (isTeacher) {
-      // Teachers only approve student leaves
+      // Teachers only approve student leaves (their mentees)
       return allLeaves.filter((l) => l.applicantType === "student");
     }
     if (isAdmin) {
@@ -129,6 +134,9 @@ export function LeaveApprovals() {
             setSelectedLeave(null);
             setActionType(null);
           },
+          onError: (err) => {
+            showToast(err?.data?.error || err?.message || "Failed to approve leave.", true);
+          },
         }
       );
     } else {
@@ -140,6 +148,9 @@ export function LeaveApprovals() {
             setSelectedLeave(null);
             setActionType(null);
           },
+          onError: (err) => {
+            showToast(err?.data?.error || err?.message || "Failed to reject leave.", true);
+          },
         }
       );
     }
@@ -149,8 +160,12 @@ export function LeaveApprovals() {
     <div className="space-y-6 pb-12">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-4 py-3 text-sm font-medium text-emerald-100 shadow-2xl backdrop-blur-md">
-          <CheckCircle2 className="size-4 text-emerald-400" />
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-2xl backdrop-blur-md ${
+          toastIsError
+            ? "border-rose-500/30 bg-rose-950/90 text-rose-100"
+            : "border-emerald-500/30 bg-emerald-950/90 text-emerald-100"
+        }`}>
+          {toastIsError ? <AlertCircle className="size-4 text-rose-400" /> : <CheckCircle2 className="size-4 text-emerald-400" />}
           <span>{toastMessage}</span>
         </div>
       )}
@@ -328,8 +343,13 @@ export function LeaveApprovals() {
                       {item.applicantName}
                     </span>
                     <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase">
-                      {item.applicantType === "faculty" ? "👨‍🏫 Teacher" : "🎓 Student"}
+                      {item.applicantType === "faculty" ? "👨‍🏫 Teacher" : "🎓 Mentee"}
                     </span>
+                    {isTeacher && item.applicantType === "student" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-500/20">
+                        <GraduationCap className="size-3" /> Your Mentee
+                      </span>
+                    )}
                     {item.studentId && (
                       <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
                         {item.studentId}

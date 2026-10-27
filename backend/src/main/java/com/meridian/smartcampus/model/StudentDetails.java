@@ -26,6 +26,7 @@ public class StudentDetails {
     private List<String> risks = new ArrayList<>();
     private Map<String, Object> mentor;
     private Map<String, Object> fees;
+    private List<LeaveRequest> leaves = new ArrayList<>();
 
     public StudentDetails() {}
 
@@ -149,5 +150,13 @@ public class StudentDetails {
 
     public void setFees(Map<String, Object> fees) {
         this.fees = fees;
+    }
+
+    public List<LeaveRequest> getLeaves() {
+        return leaves;
+    }
+
+    public void setLeaves(List<LeaveRequest> leaves) {
+        this.leaves = leaves;
     }
 }

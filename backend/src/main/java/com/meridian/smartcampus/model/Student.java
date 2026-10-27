@@ -22,6 +22,8 @@ public class Student {
     private String status = "active";
     private Integer attendance = 90;
     private Long mentorId = 1L;
+    private String mentorName;
+    private String mentorEmail;
 
     public Student() {}
 
@@ -151,5 +153,21 @@ public class Student {
 
     public void setMentorId(Long mentorId) {
         this.mentorId = mentorId;
+    }
+
+    public String getMentorName() {
+        return mentorName;
+    }
+
+    public void setMentorName(String mentorName) {
+        this.mentorName = mentorName;
+    }
+
+    public String getMentorEmail() {
+        return mentorEmail;
+    }
+
+    public void setMentorEmail(String mentorEmail) {
+        this.mentorEmail = mentorEmail;
     }
 }

@@ -1,9 +1,15 @@
 package com.meridian.smartcampus.controller;
 
+import com.meridian.smartcampus.model.Faculty;
 import com.meridian.smartcampus.model.LeaveRequest;
 import com.meridian.smartcampus.model.Notification;
+import com.meridian.smartcampus.model.Student;
+import com.meridian.smartcampus.model.User;
+import com.meridian.smartcampus.repository.FacultyRepository;
 import com.meridian.smartcampus.repository.LeaveRequestRepository;
 import com.meridian.smartcampus.repository.NotificationRepository;
+import com.meridian.smartcampus.repository.StudentRepository;
+import com.meridian.smartcampus.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,13 +25,39 @@ public class LeaveRequestController {
 
     private final LeaveRequestRepository leaveRequestRepository;
     private final NotificationRepository notificationRepository;
+    private final StudentRepository studentRepository;
+    private final FacultyRepository facultyRepository;
+    private final UserRepository userRepository;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public LeaveRequestController(LeaveRequestRepository leaveRequestRepository,
-                                  NotificationRepository notificationRepository) {
+                                  NotificationRepository notificationRepository,
+                                  StudentRepository studentRepository,
+                                  FacultyRepository facultyRepository,
+                                  UserRepository userRepository) {
         this.leaveRequestRepository = leaveRequestRepository;
         this.notificationRepository = notificationRepository;
+        this.studentRepository = studentRepository;
+        this.facultyRepository = facultyRepository;
+        this.userRepository = userRepository;
+    }
+
+    private Long resolveFacultyId(String username) {
+        if (username == null || username.trim().isEmpty()) return 1L;
+        String clean = username.trim().toLowerCase();
+        Optional<Faculty> fOpt = facultyRepository.findByUsername(clean);
+        if (fOpt.isPresent()) return fOpt.get().getId();
+
+        fOpt = facultyRepository.findByEmail(clean + "@meridian.edu");
+        if (fOpt.isPresent()) return fOpt.get().getId();
+
+        Optional<User> uOpt = userRepository.findByUsername(clean);
+        if (uOpt.isPresent() && uOpt.get().getEmail() != null) {
+            fOpt = facultyRepository.findByEmail(uOpt.get().getEmail());
+            if (fOpt.isPresent()) return fOpt.get().getId();
+        }
+        return 1L;
     }
 
     @GetMapping
@@ -59,9 +91,32 @@ public class LeaveRequestController {
             }
         } else if ("approvals".equalsIgnoreCase(scope)) {
             if ("faculty".equalsIgnoreCase(userRole)) {
-                // Teacher reviews student leave requests
+                // Teacher reviews student leave requests ONLY for their assigned mentees!
+                Long currentFacultyId = resolveFacultyId(currentUsername);
+                List<Student> mentees = studentRepository.findByMentorId(currentFacultyId);
+                Set<String> menteeUsernames = mentees.stream()
+                        .map(s -> s.getEmail() != null ? s.getEmail().split("@")[0].toLowerCase() : "")
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toSet());
+                Set<String> menteeStudentIds = mentees.stream()
+                        .map(s -> s.getStudentId() != null ? s.getStudentId().toLowerCase() : "")
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toSet());
+
                 list = list.stream()
                         .filter(l -> "student".equalsIgnoreCase(l.getApplicantType()))
+                        .filter(l -> {
+                            if (currentUsername != null && currentUsername.equalsIgnoreCase(l.getAssignedApproverUsername())) {
+                                return true;
+                            }
+                            if (l.getApplicantUsername() != null && menteeUsernames.contains(l.getApplicantUsername().toLowerCase())) {
+                                return true;
+                            }
+                            if (l.getStudentId() != null && menteeStudentIds.contains(l.getStudentId().toLowerCase())) {
+                                return true;
+                            }
+                            return false;
+                        })
                         .collect(Collectors.toList());
             } else if ("admin".equalsIgnoreCase(userRole)) {
                 // Admin reviews faculty leave requests
@@ -69,6 +124,36 @@ public class LeaveRequestController {
                         .filter(l -> "faculty".equalsIgnoreCase(l.getApplicantType()))
                         .collect(Collectors.toList());
             }
+        } else if ("faculty".equalsIgnoreCase(userRole)) {
+            // General query by a faculty member: restrict student leaves strictly to their mentees
+            Long currentFacultyId = resolveFacultyId(currentUsername);
+            List<Student> mentees = studentRepository.findByMentorId(currentFacultyId);
+            Set<String> menteeUsernames = mentees.stream()
+                    .map(s -> s.getEmail() != null ? s.getEmail().split("@")[0].toLowerCase() : "")
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toSet());
+            Set<String> menteeStudentIds = mentees.stream()
+                    .map(s -> s.getStudentId() != null ? s.getStudentId().toLowerCase() : "")
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toSet());
+
+            list = list.stream()
+                    .filter(l -> {
+                        if ("faculty".equalsIgnoreCase(l.getApplicantType())) {
+                            return currentUsername != null && currentUsername.equalsIgnoreCase(l.getApplicantUsername());
+                        }
+                        if (currentUsername != null && currentUsername.equalsIgnoreCase(l.getAssignedApproverUsername())) {
+                            return true;
+                        }
+                        if (l.getApplicantUsername() != null && menteeUsernames.contains(l.getApplicantUsername().toLowerCase())) {
+                            return true;
+                        }
+                        if (l.getStudentId() != null && menteeStudentIds.contains(l.getStudentId().toLowerCase())) {
+                            return true;
+                        }
+                        return false;
+                    })
+                    .collect(Collectors.toList());
         }
 
         // Specific applicantType filter
@@ -157,25 +242,47 @@ public class LeaveRequestController {
             // Student request
             request.setApplicantType("student");
             request.setAssignedApproverRole("faculty");
-            if (request.getAssignedApproverName() == null || request.getAssignedApproverName().isEmpty()) {
-                request.setAssignedApproverName("Dr. Alan Turing (HOD/Mentor)");
-            }
-            if (request.getApplicantUsername() == null || request.getApplicantUsername().isEmpty()) {
-                request.setApplicantUsername(currentUsername != null ? currentUsername : "student1cse");
-            }
-            if (request.getApplicantName() == null || request.getApplicantName().isEmpty()) {
-                request.setApplicantName("Alex Rivera");
-            }
-            if (request.getDepartment() == null || request.getDepartment().isEmpty()) {
-                request.setDepartment("CSE");
+
+            String studentUsername = (request.getApplicantUsername() != null && !request.getApplicantUsername().isEmpty())
+                    ? request.getApplicantUsername() : (currentUsername != null ? currentUsername : "student1cse");
+            request.setApplicantUsername(studentUsername);
+
+            // Lookup the applicant student to determine assigned mentor
+            Optional<Student> studentOpt = studentRepository.findAll().stream()
+                    .filter(s -> (s.getEmail() != null && s.getEmail().toLowerCase().startsWith(studentUsername.toLowerCase()))
+                            || (s.getStudentId() != null && s.getStudentId().equalsIgnoreCase(request.getStudentId()))
+                            || (s.getName() != null && s.getName().equalsIgnoreCase(request.getApplicantName())))
+                    .findFirst();
+
+            Faculty mentor = null;
+            if (studentOpt.isPresent()) {
+                Student st = studentOpt.get();
+                if (st.getStudentId() != null) request.setStudentId(st.getStudentId());
+                if (st.getName() != null && (request.getApplicantName() == null || request.getApplicantName().isEmpty())) {
+                    request.setApplicantName(st.getName());
+                }
+                if (st.getDepartment() != null && (request.getDepartment() == null || request.getDepartment().isEmpty())) {
+                    request.setDepartment(st.getDepartment());
+                }
+                if (st.getMentorId() != null) {
+                    mentor = facultyRepository.findById(st.getMentorId()).orElse(null);
+                }
             }
 
-            // Create notification for Faculty
+            if (mentor != null) {
+                request.setAssignedApproverUsername(mentor.getUsername());
+                request.setAssignedApproverName(mentor.getName() + " (Mentor)");
+            } else {
+                request.setAssignedApproverUsername("teacher1cse");
+                request.setAssignedApproverName("Dr. Alan Turing (Mentor)");
+            }
+
+            // Create notification for Faculty mentor
             createNotification(
                     "faculty",
                     request.getAssignedApproverUsername(),
-                    "New Student Leave Application",
-                    "Student " + request.getApplicantName() + " (" + request.getDepartment() + ") applied for " +
+                    "New Mentee Leave Application",
+                    "Your mentee " + request.getApplicantName() + " (" + request.getDepartment() + ") applied for " +
                             (request.getTotalDays() != null ? request.getTotalDays() + " days " : "") +
                             request.getLeaveType() + " from " + request.getStartDate() + " to " + request.getEndDate() + "."
             );
@@ -204,25 +311,54 @@ public class LeaveRequestController {
 
         LeaveRequest leave = opt.get();
 
-        // Enforce approval hierarchy:
-        // Student leaves -> approved by Teacher (faculty) or Admin
-        // Teacher leaves -> approved ONLY by Admin
+        // Enforce strict approval hierarchy:
+        // Student leaves -> approved ONLY by that student's designated mentor! (or campus admin)
+        // Teacher leaves -> approved ONLY by campus admin
         if ("faculty".equalsIgnoreCase(leave.getApplicantType())) {
             if (!"admin".equalsIgnoreCase(userRole)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Only Campus Administrators can approve faculty leave requests."));
+                        .body(Map.of("error", "Only Campus Administrators can sanction faculty leave requests."));
             }
         } else if ("student".equalsIgnoreCase(leave.getApplicantType())) {
-            if (!"faculty".equalsIgnoreCase(userRole) && !"admin".equalsIgnoreCase(userRole)) {
+            if ("faculty".equalsIgnoreCase(userRole)) {
+                Long currentFacultyId = resolveFacultyId(currentUsername);
+
+                // Lookup applicant student to verify mentorship
+                Optional<Student> studentOpt = studentRepository.findAll().stream()
+                        .filter(s -> (s.getEmail() != null && leave.getApplicantUsername() != null && s.getEmail().toLowerCase().startsWith(leave.getApplicantUsername().toLowerCase()))
+                                || (s.getStudentId() != null && s.getStudentId().equalsIgnoreCase(leave.getStudentId()))
+                                || (s.getName() != null && s.getName().equalsIgnoreCase(leave.getApplicantName())))
+                        .findFirst();
+
+                boolean isMentor = false;
+                String assignedMentorName = "the assigned faculty mentor";
+
+                if (studentOpt.isPresent()) {
+                    Student s = studentOpt.get();
+                    if (s.getMentorId() != null) {
+                        isMentor = s.getMentorId().equals(currentFacultyId);
+                        if (s.getMentorName() != null) assignedMentorName = s.getMentorName();
+                    }
+                }
+
+                if (!isMentor && currentUsername != null && currentUsername.equalsIgnoreCase(leave.getAssignedApproverUsername())) {
+                    isMentor = true;
+                }
+
+                if (!isMentor) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("error", "Access Denied: Only " + assignedMentorName + " (the designated faculty mentor) is authorized to approve leave for this student."));
+                }
+            } else if (!"admin".equalsIgnoreCase(userRole)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Only Faculty members (or administrators) can approve student leave requests."));
+                        .body(Map.of("error", "Only the assigned faculty mentor can approve student leave applications."));
             }
         }
 
         String remarks = body != null && body.containsKey("remarks") ? body.get("remarks") : "Approved without conditions.";
         String reviewerName = "admin".equalsIgnoreCase(userRole)
                 ? (currentUsername != null ? currentUsername : "Campus Administrator")
-                : (currentUsername != null ? currentUsername : "Faculty Reviewer");
+                : (currentUsername != null ? currentUsername : "Faculty Mentor");
 
         leave.setStatus("APPROVED");
         leave.setReviewedBy(reviewerName);
@@ -237,7 +373,7 @@ public class LeaveRequestController {
                 leave.getApplicantUsername(),
                 "Leave Approved ✅",
                 "Your leave application (" + leave.getLeaveType() + ": " + leave.getStartDate() + " to " +
-                        leave.getEndDate() + ") has been APPROVED by " + reviewerName + ". Remarks: " + remarks
+                        leave.getEndDate() + ") has been APPROVED by your mentor " + reviewerName + ". Remarks: " + remarks
         );
 
         return ResponseEntity.ok(updated);
@@ -264,16 +400,44 @@ public class LeaveRequestController {
                         .body(Map.of("error", "Only Campus Administrators can reject faculty leave requests."));
             }
         } else if ("student".equalsIgnoreCase(leave.getApplicantType())) {
-            if (!"faculty".equalsIgnoreCase(userRole) && !"admin".equalsIgnoreCase(userRole)) {
+            if ("faculty".equalsIgnoreCase(userRole)) {
+                Long currentFacultyId = resolveFacultyId(currentUsername);
+
+                Optional<Student> studentOpt = studentRepository.findAll().stream()
+                        .filter(s -> (s.getEmail() != null && leave.getApplicantUsername() != null && s.getEmail().toLowerCase().startsWith(leave.getApplicantUsername().toLowerCase()))
+                                || (s.getStudentId() != null && s.getStudentId().equalsIgnoreCase(leave.getStudentId()))
+                                || (s.getName() != null && s.getName().equalsIgnoreCase(leave.getApplicantName())))
+                        .findFirst();
+
+                boolean isMentor = false;
+                String assignedMentorName = "the assigned faculty mentor";
+
+                if (studentOpt.isPresent()) {
+                    Student s = studentOpt.get();
+                    if (s.getMentorId() != null) {
+                        isMentor = s.getMentorId().equals(currentFacultyId);
+                        if (s.getMentorName() != null) assignedMentorName = s.getMentorName();
+                    }
+                }
+
+                if (!isMentor && currentUsername != null && currentUsername.equalsIgnoreCase(leave.getAssignedApproverUsername())) {
+                    isMentor = true;
+                }
+
+                if (!isMentor) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("error", "Access Denied: Only " + assignedMentorName + " (the designated faculty mentor) can reject leave for this student."));
+                }
+            } else if (!"admin".equalsIgnoreCase(userRole)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Only Faculty members can reject student leave requests."));
+                        .body(Map.of("error", "Only the assigned faculty mentor can reject student leave applications."));
             }
         }
 
-        String remarks = body != null && body.containsKey("remarks") ? body.get("remarks") : "Declined due to academic scheduling conflicts.";
+        String remarks = body != null && body.containsKey("remarks") ? body.get("remarks") : "Declined due to academic requirements.";
         String reviewerName = "admin".equalsIgnoreCase(userRole)
                 ? (currentUsername != null ? currentUsername : "Campus Administrator")
-                : (currentUsername != null ? currentUsername : "Faculty Reviewer");
+                : (currentUsername != null ? currentUsername : "Faculty Mentor");
 
         leave.setStatus("REJECTED");
         leave.setReviewedBy(reviewerName);

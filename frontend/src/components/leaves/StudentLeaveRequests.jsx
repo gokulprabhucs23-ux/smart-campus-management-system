@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "../../api/custom-fetch";
 import {
   CalendarDays,
   CalendarCheck,
@@ -41,6 +43,31 @@ export function StudentLeaveRequests() {
   const createMutation = useCreateLeave();
   const deleteMutation = useDeleteLeave();
 
+  // Fetch student details to resolve designated faculty mentor
+  const { data: myStudentProfile } = useQuery({
+    queryKey: ["myStudentProfile", currentUsername],
+    queryFn: async () => {
+      try {
+        const students = await customFetch("/api/students");
+        const myStudent = (students || []).find(
+          (s) => (s.email && s.email.toLowerCase().startsWith(currentUsername.toLowerCase())) || s.name === currentName
+        );
+        if (myStudent?.id) {
+          const details = await customFetch(`/api/students/${myStudent.id}/details`);
+          return { student: myStudent, details };
+        }
+      } catch (_) {}
+      return null;
+    },
+  });
+
+  const assignedMentor = myStudentProfile?.details?.mentor || {
+    name: "Dr. Marvin Minsky",
+    designation: "Professor",
+    department: currentDept,
+    username: "teacher26cse"
+  };
+
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -81,16 +108,8 @@ export function StudentLeaveRequests() {
       return;
     }
 
-    const selectedFacultyObj = facultyList.find(
-      (f) => f.name === assignedTeacher || f.username === assignedTeacher
-    );
-
-    const approverName = selectedFacultyObj
-      ? selectedFacultyObj.name
-      : assignedTeacher || "Dr. Alan Turing (HOD/Mentor)";
-    const approverUsername = selectedFacultyObj
-      ? selectedFacultyObj.username
-      : "teacher1cse";
+    const approverName = assignedMentor?.name || "Dr. Marvin Minsky (Mentor)";
+    const approverUsername = assignedMentor?.username || "teacher26cse";
 
     createMutation.mutate(
       {
@@ -453,27 +472,27 @@ export function StudentLeaveRequests() {
                 </select>
               </div>
 
-              {/* Select Faculty / Mentor */}
+              {/* Designated Faculty Mentor */}
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">
-                  Assigned Faculty Reviewer (Teacher)
+                  Designated Faculty Mentor (Authorized Approver)
                 </label>
-                <select
-                  value={assignedTeacher}
-                  onChange={(e) => setAssignedTeacher(e.target.value)}
-                  className="w-full h-10 rounded-xl border border-input bg-background px-3 text-xs font-medium focus:border-primary focus:outline-none"
-                >
-                  <option value="">Dr. Alan Turing (Professor & HOD, CSE)</option>
-                  {facultyList
-                    .filter((f) => f.department === currentDept || !f.department)
-                    .map((fac) => (
-                      <option key={fac.id || fac.name} value={fac.name}>
-                        {fac.name} — {fac.designation || "Faculty"} ({fac.department || "Dept"})
-                      </option>
-                    ))}
-                </select>
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="font-bold text-foreground flex items-center gap-1.5">
+                      <GraduationCap className="size-4 text-primary" />
+                      {assignedMentor?.name || "Dr. Marvin Minsky"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {assignedMentor?.designation || "Professor"} · {assignedMentor?.department || currentDept} Department
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">
+                    Designated Mentor
+                  </span>
+                </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  The chosen teacher will receive your request on their approval desk.
+                  Under campus mentorship rules, only your designated mentor has authority to approve or decline this leave application.
                 </p>
               </div>
 

@@ -23,6 +23,7 @@ public class Faculty {
     private String designation;
     private String qualification;
     private String status = "active";
+    private String username;
     private List<String> subjects = new ArrayList<>();
 
     public Faculty() {}
@@ -130,5 +131,13 @@ public class Faculty {
 
     public void setSubjects(List<String> subjects) {
         this.subjects = subjects;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 }
